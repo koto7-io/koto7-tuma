@@ -1,0 +1,105 @@
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f4f0;
+  --surface: #fbfaf7;
+  --ink: #16150f;
+  --muted: #5c594d;
+  --border: #dedcd4;
+  --border-light: #f0eee8;
+  --accent: #e9c46a;
+  --accent-dark: #8a5a0b;
+  --link: #8a5a0b;
+  --link-hover: #16150f;
+  --nav-active-bg: #e4e1d8;
+  --input-bg: #ffffff;
+  --code-bg: #ffffff;
+  --row-selected: #f4f2ec;
+  --overlay: rgba(22, 21, 15, 0.25);
+  --issue-badge-bg: #f2dcc4;
+  --issue-badge-fg: #8a3e12;
+  --green: #2f7d57;
+  --green-bg: #e4f0e9;
+  --green-border: #b7d8c6;
+  --amber: #8a5a0b;
+  --amber-bg: #faf3df;
+  --amber-border: #e3d3a8;
+  --red: #9c3226;
+  --red-bg: #f8e7e4;
+  --red-border: #ebc4be;
+  --sidebar-width: 236px;
+  --mono: "IBM Plex Mono", monospace;
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f0e0c;
+  --surface: #181612;
+  --ink: #eceae3;
+  --muted: #9a9688;
+  --border: #2e2b24;
+  --border-light: #211f1a;
+  --accent: #e9c46a;
+  --accent-dark: #f0d078;
+  --link: #e9c46a;
+  --link-hover: #eceae3;
+  --nav-active-bg: #262319;
+  --input-bg: #12110e;
+  --code-bg: #12110e;
+  --row-selected: #221f18;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --issue-badge-bg: #3d2a14;
+  --issue-badge-fg: #f0c078;
+  --green: #6ecf98;
+  --green-bg: #152820;
+  --green-border: #2a4d38;
+  --amber: #e9c46a;
+  --amber-bg: #2a2418;
+  --amber-border: #4a3d22;
+  --red: #e8887a;
+  --red-bg: #2a1816;
+  --red-border: #5a322c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  background: var(--input-bg);
+}

@@ -1,0 +1,134 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tuma
+      POSTGRES_PASSWORD: tuma
+      POSTGRES_DB: tuma
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tuma"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: tuma
+      POSTGRES_PWD: tuma
+      POSTGRES_SEEDS: postgres
+      ENABLE_ES: "false"
+      SKIP_DEFAULT_NAMESPACE_CREATION: "false"
+    # Temporal gRPC + Web UI: internal network only — no host ports published
+    expose:
+      - "7233"
+      - "8233"
+    networks:
+      - internal
+
+  tuma-api:
+    build: ..
+    command: ["serve", "api"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://tuma:tuma@postgres:5432/tuma?sslmode=disable
+      TEMPORAL_HOST: temporal:7233
+      TUMA_ENCRYPTION_KEY: "01234567890123456789012345678901"
+      TUMA_PUBLIC_BASE_URL: ${TUMA_PUBLIC_BASE_URL:-http://localhost}
+      TUMA_ADMIN_EMAIL: ${TUMA_ADMIN_EMAIL:-admin@localhost}
+      # Leave TUMA_ADMIN_PASSWORD unset on first boot to auto-generate; check container logs.
+      TUMA_ADMIN_PASSWORD: ${TUMA_ADMIN_PASSWORD:-}
+    expose:
+      - "8080"
+    networks:
+      - internal
+
+  tuma-worker:
+    build: ..
+    command: ["serve", "worker"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://tuma:tuma@postgres:5432/tuma?sslmode=disable
+      TEMPORAL_HOST: temporal:7233
+      TUMA_ENCRYPTION_KEY: "01234567890123456789012345678901"
+      TUMA_PER_CONN_CONCURRENCY: "10"
+    networks:
+      - internal
+
+  tuma-web:
+    build:
+      context: ..
+      dockerfile: Dockerfile.web
+    depends_on:
+      - tuma-api
+    expose:
+      - "80"
+    networks:
+      - internal
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    expose:
+      - "9090"
+    networks:
+      - internal
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: tuma
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana-dashboard.json:/etc/grafana/provisioning/dashboards/tuma.json:ro
+      - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2.9-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - tuma-web
+      - tuma-api
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  grafana_data:
+  caddy_data:

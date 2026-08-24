@@ -1,0 +1,7 @@
+web/node_modules
+web/dist
+.git
+**/.DS_Store
+deploy
+docs
+*.md

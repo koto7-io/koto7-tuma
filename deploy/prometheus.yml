@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: tuma-api
+    static_configs:
+      - targets: ["tuma-api:8080"]
