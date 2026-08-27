@@ -17,6 +17,8 @@ export function MetricsPage() {
 
   if (!m) return <p>Loading…</p>;
 
+  const connections = m.connections ?? [];
+
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
@@ -69,10 +71,10 @@ export function MetricsPage() {
 
       <Card title="By connection">
         <div>
-          {m.connections.length === 0 && (
+          {connections.length === 0 && (
             <p style={{ padding: 16, margin: 0, color: "var(--muted)" }}>No connections yet.</p>
           )}
-          {m.connections.length > 0 && (
+          {connections.length > 0 && (
             <div
               style={{
                 display: "grid",
@@ -94,7 +96,7 @@ export function MetricsPage() {
               <span style={{ textAlign: "right" }}>Status</span>
             </div>
           )}
-          {m.connections.map((c) => (
+          {connections.map((c) => (
             <Link
               key={c.connection_id}
               to={`/connections/${c.connection_id}`}

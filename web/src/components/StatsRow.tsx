@@ -20,16 +20,17 @@ export function ConnectionStatsRow({ stats }: { stats?: ConnectionStats }) {
   );
 }
 
-export function HourlyBars({ data, label }: { data: { hour: string; count: number }[]; label: string }) {
-  const max = Math.max(1, ...data.map((d) => d.count));
+export function HourlyBars({ data, label }: { data: { hour: string; count: number }[] | null | undefined; label: string }) {
+  const rows = data ?? [];
+  const max = Math.max(1, ...rows.map((d) => d.count));
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{label}</div>
-      {data.length === 0 ? (
+      {rows.length === 0 ? (
         <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>No activity in the last 24 hours.</p>
       ) : (
         <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
-          {data.map((d) => (
+          {rows.map((d) => (
             <div
               key={d.hour}
               title={`${formatHour(d.hour)}: ${d.count}`}
@@ -45,10 +46,10 @@ export function HourlyBars({ data, label }: { data: { hour: string; count: numbe
           ))}
         </div>
       )}
-      {data.length > 0 && (
+      {rows.length > 0 && (
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "var(--muted)", fontFamily: "var(--mono)" }}>
-          <span>{formatHour(data[0].hour)}</span>
-          <span>{formatHour(data[data.length - 1].hour)}</span>
+          <span>{formatHour(rows[0].hour)}</span>
+          <span>{formatHour(rows[rows.length - 1].hour)}</span>
         </div>
       )}
     </div>

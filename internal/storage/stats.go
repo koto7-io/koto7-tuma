@@ -225,5 +225,8 @@ func scanHourly(rows interface {
 		}
 		out = append(out, h)
 	}
+	if out == nil {
+		out = []HourlyCount{}
+	}
 	return out, nil
 }
