@@ -1,5 +1,7 @@
 # Tuma — team guide
 
+**Website:** https://tuma.koto7.io · **License:** MIT
+
 Self-hosted webhook reliability layer. Providers POST to Tuma; Tuma stores events durably, delivers to your app with retries, and surfaces failures for replay.
 
 **Console:** Connections · Metrics · Issues  

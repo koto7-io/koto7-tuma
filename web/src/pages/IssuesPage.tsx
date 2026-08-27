@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, Issue } from "../lib/api";
+import { usePageRestore } from "../lib/usePageRestore";
 import { Card, Pill } from "../components/Layout";
 import { buttonPrimary, buttonSecondary } from "./LoginPage";
 
@@ -15,7 +16,7 @@ export function IssuesPage() {
     api.listIssues(status).then((r) => setIssues(r.issues ?? [])).catch(console.error);
   }
 
-  useEffect(() => {
+  usePageRestore(() => {
     load(filter);
   }, [filter]);
 

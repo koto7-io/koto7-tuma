@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Connection } from "../lib/api";
+import { usePageRestore } from "../lib/usePageRestore";
 import { Card, Pill } from "../components/Layout";
 import { ConnectionStatsRow } from "../components/StatsRow";
 import { buttonPrimary, buttonSecondary, inputStyle } from "./LoginPage";
@@ -23,7 +24,7 @@ export function ConnectionsPage() {
   const [created, setCreated] = useState<{ connection: Connection; signing_secret: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
+  usePageRestore(() => {
     api.listConnections().then((r) => setConnections(r.connections)).catch(console.error);
   }, []);
 

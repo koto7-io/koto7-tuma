@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, Connection, Delivery } from "../lib/api";
+import { usePageRestore } from "../lib/usePageRestore";
 import { Card, Pill } from "../components/Layout";
 import { ConnectionStatsRow } from "../components/StatsRow";
 import { buttonPrimary, buttonSecondary, inputStyle } from "./LoginPage";
@@ -11,7 +12,7 @@ export function ConnectionDetailPage() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
+  usePageRestore(() => {
     if (!id) return;
     api.getConnection(id).then(setConn).catch(console.error);
     api.listDeliveries(id).then((r) => setDeliveries(r.deliveries)).catch(console.error);

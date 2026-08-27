@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import type { PlatformMetrics } from "../lib/types";
 import { Card, Pill } from "../components/Layout";
 import { HourlyBars, StatCell } from "../components/StatsRow";
+import { usePageRestore } from "../lib/usePageRestore";
 
 export function MetricsPage() {
   const [m, setM] = useState<PlatformMetrics | null>(null);
 
-  useEffect(() => {
+  usePageRestore(() => {
     api.getMetrics().then(setM).catch(console.error);
     const t = setInterval(() => api.getMetrics().then(setM).catch(console.error), 30_000);
     return () => clearInterval(t);
