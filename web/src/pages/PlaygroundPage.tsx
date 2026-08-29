@@ -52,6 +52,20 @@ function LogPane({ lines }: { lines: string[] }) {
   );
 }
 
+function friendlyPlaygroundError(e: unknown): string {
+  const msg = String(e).toLowerCase();
+  if (msg.includes("404") || msg.includes("not found")) {
+    return "Could not reach the playground. Refresh the page and try again.";
+  }
+  if (msg.includes("429") || msg.includes("rate limit")) {
+    return "Too many requests — wait a minute and try again.";
+  }
+  if (msg.includes("401") || msg.includes("unauthorized") || msg.includes("session")) {
+    return "Session expired. Refresh the page to start a new demo.";
+  }
+  return "Something went wrong. Try again or refresh the page.";
+}
+
 export function PlaygroundPage() {
   const [ready, setReady] = useState<"loading" | "disabled" | "bootstrapping" | "ready">("loading");
   const [inboundURL, setInboundURL] = useState("");
@@ -90,8 +104,7 @@ export function PlaygroundPage() {
         setInboundURL(b.inbound_url);
         setReady("ready");
       })
-      .catch((e) => {
-        setError(String(e));
+      .catch(() => {
         setReady("disabled");
       });
   }, []);
@@ -145,7 +158,7 @@ export function PlaygroundPage() {
         lastDupId.current = res.results[0].event_id;
       }
     } catch (e) {
-      setError(String(e));
+      setError(friendlyPlaygroundError(e));
     } finally {
       setBusy(false);
     }
@@ -159,7 +172,7 @@ export function PlaygroundPage() {
       else if (action === "fix") await api.playgroundFix();
       else await api.playgroundReplay();
     } catch (e) {
-      setError(String(e));
+      setError(friendlyPlaygroundError(e));
     } finally {
       setBusy(false);
     }
@@ -176,17 +189,15 @@ export function PlaygroundPage() {
   if (ready === "disabled") {
     return (
       <div style={{ minHeight: "100vh", background: "var(--bg)", padding: 40 }}>
-        <h1 style={{ fontFamily: "var(--mono)", fontSize: 20 }}>Playground unavailable</h1>
+        <h1 style={{ fontFamily: "var(--mono)", fontSize: 20 }}>Playground temporarily unavailable</h1>
         <p style={{ color: "var(--muted)", maxWidth: 520, lineHeight: 1.6 }}>
-          Demo mode is not enabled on this server. Set{" "}
-          <code>TUMA_DEMO_MODE=true</code> and{" "}
-          <code>TUMA_PUBLIC_BASE_URL=https://tuma-demo.koto7.dev</code> in{" "}
-          <code>deploy/.env</code>, then restart <code>tuma-api</code>.
+          The live demo is starting up or briefly offline. Try again in a minute, open the full console, or self-host from GitHub.
         </p>
-        {error && <p style={{ color: "var(--red)", marginTop: 16 }}>{error}</p>}
-        <Link to="/" style={{ display: "inline-block", marginTop: 20 }}>
-          Open console ↗
-        </Link>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 24 }}>
+          <a href="/playground" style={{ fontSize: 14 }}>Try again</a>
+          <Link to="/" style={{ fontSize: 14 }}>Open console ↗</Link>
+          <a href="https://github.com/koto7-io/koto7-tuma" style={{ fontSize: 14 }}>Self-host on GitHub ↗</a>
+        </div>
       </div>
     );
   }
