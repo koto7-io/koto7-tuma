@@ -52,6 +52,10 @@ services:
       TUMA_ADMIN_EMAIL: ${TUMA_ADMIN_EMAIL:-admin@localhost}
       # Leave TUMA_ADMIN_PASSWORD unset on first boot to auto-generate; check container logs.
       TUMA_ADMIN_PASSWORD: ${TUMA_ADMIN_PASSWORD:-}
+      TUMA_DEMO_MODE: ${TUMA_DEMO_MODE:-false}
+      TUMA_PLAYGROUND_INTERNAL_BASE: ${TUMA_PLAYGROUND_INTERNAL_BASE:-http://tuma-api:8080}
+      TUMA_PLAYGROUND_SESSION_TTL_HOURS: ${TUMA_PLAYGROUND_SESSION_TTL_HOURS:-2}
+      TUMA_PLAYGROUND_MAX_SESSIONS: ${TUMA_PLAYGROUND_MAX_SESSIONS:-500}
     expose:
       - "8080"
     networks:

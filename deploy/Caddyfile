@@ -1,6 +1,16 @@
 :80 {
     reverse_proxy /api/* tuma-api:8080
     reverse_proxy /e/* tuma-api:8080
+    reverse_proxy /playground/r/* tuma-api:8080
+    reverse_proxy /healthz tuma-api:8080
+    reverse_proxy /readyz tuma-api:8080
+    reverse_proxy tuma-web:80
+}
+
+tuma-demo.koto7.dev {
+    reverse_proxy /api/* tuma-api:8080
+    reverse_proxy /e/* tuma-api:8080
+    reverse_proxy /playground/r/* tuma-api:8080
     reverse_proxy /healthz tuma-api:8080
     reverse_proxy /readyz tuma-api:8080
     reverse_proxy tuma-web:80

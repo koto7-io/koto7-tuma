@@ -187,6 +187,23 @@ After tests 1–3, verify Metrics page totals match connection stats. Toggle pil
 
 ---
 
+## Testing with real EasyPost
+
+1. Create an **EasyPost** connection; set destination to your app or https://webhook.site/…
+2. In EasyPost Dashboard → Webhooks, paste Tuma **Webhook URL** and use the **webhook secret** when creating the connection.
+3. Send a test event from EasyPost (Test mode) → check Recent deliveries.
+4. Tuma verifies legacy **`X-Hmac-Signature`** (HMAC-SHA256 over raw body — matches official EasyPost SDKs). After deploy, confirm the header EasyPost sends; if you see `x-hmac-signature-v2` instead, open an issue with captured headers.
+
+Local smoke test (no EasyPost account):
+
+```bash
+python3 scripts/simulate-easypost-event.py \
+  --url https://tuma-demo.koto7.dev/e/YOUR_PATH \
+  --secret YOUR_WEBHOOK_SECRET
+```
+
+---
+
 ## Testing with real Stripe
 
 1. Create Stripe connection; set destination to your app or https://webhook.site/…
@@ -284,3 +301,4 @@ cd web && npm install && npm run dev  # terminal 3
 |---|---|
 | `scripts/webhook-echo.py` | Local destination; `--fail` for 502 |
 | `scripts/simulate-stripe-event.py` | Signed Stripe-style inbound; `--count N`, `--event-id` |
+| `scripts/simulate-easypost-event.py` | Signed EasyPost-style inbound (legacy `X-Hmac-Signature`); `--count N`, `--event-id` |

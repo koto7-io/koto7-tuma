@@ -19,6 +19,10 @@ type Config struct {
 	MaxBodyBytes       int64
 	PerConnConcurrency int
 	LogLevel           string
+	DemoMode           bool
+	PlaygroundInternalBase string
+	PlaygroundSessionTTL   time.Duration
+	PlaygroundMaxSessions  int
 }
 
 func Load() (*Config, error) {
@@ -34,6 +38,9 @@ func Load() (*Config, error) {
 	perConn, _ := strconv.Atoi(env("TUMA_PER_CONN_CONCURRENCY", "10"))
 	maxBody, _ := strconv.ParseInt(env("TUMA_MAX_BODY_BYTES", "1048576"), 10, 64)
 	sessionHours, _ := strconv.Atoi(env("TUMA_SESSION_TTL_HOURS", "168"))
+	demoMode := env("TUMA_DEMO_MODE", "") == "true"
+	pgHours, _ := strconv.Atoi(env("TUMA_PLAYGROUND_SESSION_TTL_HOURS", "2"))
+	pgMax, _ := strconv.Atoi(env("TUMA_PLAYGROUND_MAX_SESSIONS", "500"))
 
 	return &Config{
 		DatabaseURL:        dbURL,
@@ -47,6 +54,10 @@ func Load() (*Config, error) {
 		MaxBodyBytes:       maxBody,
 		PerConnConcurrency: perConn,
 		LogLevel:           env("TUMA_LOG_LEVEL", "info"),
+		DemoMode:           demoMode,
+		PlaygroundInternalBase: env("TUMA_PLAYGROUND_INTERNAL_BASE", "http://127.0.0.1:8080"),
+		PlaygroundSessionTTL:   time.Duration(pgHours) * time.Hour,
+		PlaygroundMaxSessions:  pgMax,
 	}, nil
 }
 

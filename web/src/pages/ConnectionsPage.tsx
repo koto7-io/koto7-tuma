@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Connection } from "../lib/api";
 import { usePageRestore } from "../lib/usePageRestore";
@@ -9,6 +9,7 @@ import { buttonPrimary, buttonSecondary, inputStyle } from "./LoginPage";
 const SOURCES = [
   { key: "stripe", name: "Stripe", sub: "Events API" },
   { key: "github", name: "GitHub", sub: "Repo webhooks" },
+  { key: "easypost", name: "EasyPost", sub: "Tracking & shipping events" },
   { key: "generic_hmac", name: "Custom", sub: "HMAC signed" },
   { key: "internal", name: "Internal", sub: "Trusted network" },
 ];
@@ -23,9 +24,14 @@ export function ConnectionsPage() {
   const [signingSecret, setSigningSecret] = useState("");
   const [created, setCreated] = useState<{ connection: Connection; signing_secret: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   usePageRestore(() => {
     api.listConnections().then((r) => setConnections(r.connections)).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    api.getConfig().then((c) => setDemoMode(c.demo_mode)).catch(() => {});
   }, []);
 
   async function create(e: FormEvent) {
@@ -56,9 +62,11 @@ export function ConnectionsPage() {
             Inbound webhooks → reliable delivery to your apps
           </p>
         </div>
-        <button style={buttonPrimary} onClick={() => { setWizard(true); setStep(0); setCreated(null); }}>
-          New connection
-        </button>
+        {!demoMode && (
+          <button style={buttonPrimary} onClick={() => { setWizard(true); setStep(0); setCreated(null); }}>
+            New connection
+          </button>
+        )}
       </div>
 
       {wizard && (

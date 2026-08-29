@@ -1,6 +1,31 @@
 export type { Connection, ConnectionStats, PlatformMetrics, HourlyCount } from "./types";
 import type { Connection, PlatformMetrics } from "./types";
 
+export type PlaygroundLogEvent = {
+  ts?: string;
+  line?: string;
+  delivery_id?: string;
+  body_preview?: string;
+};
+
+export type PlaygroundStatus = {
+  status: string;
+  delivered_24h: number;
+  open_issues: number;
+  inbound_url: string;
+  fail_destination: boolean;
+  recent_deliveries?: Delivery[];
+};
+
+export type PlaygroundBootstrap = {
+  session_id: string;
+  connection_id: string;
+  inbound_url: string;
+  inbound_path: string;
+  source_type: string;
+  destination_fail: boolean;
+};
+
 export type Delivery = {
   id: string;
   event_id: string;
@@ -76,4 +101,15 @@ export const api = {
       body: JSON.stringify({ ids }),
     }),
   getMetrics: () => request<PlatformMetrics>("/api/metrics"),
+  getConfig: () => request<{ demo_mode: boolean }>("/api/config"),
+  playgroundBootstrap: () => request<PlaygroundBootstrap>("/api/playground/bootstrap"),
+  playgroundStatus: () => request<PlaygroundStatus>("/api/playground/status"),
+  playgroundSimulate: (body: { provider: string; count: number; duplicate_event_id?: string }) =>
+    request<{ sent: number; results: { status: number; body: string; event_id: string }[] }>(
+      "/api/playground/simulate",
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  playgroundBreak: () => request<{ status: string }>("/api/playground/break", { method: "POST" }),
+  playgroundFix: () => request<{ status: string }>("/api/playground/fix", { method: "POST" }),
+  playgroundReplay: () => request<{ status: string }>("/api/playground/replay", { method: "POST" }),
 };

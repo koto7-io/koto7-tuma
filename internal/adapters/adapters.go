@@ -20,6 +20,7 @@ type SourceAdapter interface {
 var registry = map[string]SourceAdapter{
 	"stripe":       &StripeAdapter{},
 	"github":       &GitHubAdapter{},
+	"easypost":     &EasyPostAdapter{},
 	"generic_hmac": &GenericHMACAdapter{Header: "X-Signature", Algorithm: "sha256"},
 	"internal":     &InternalAdapter{},
 }

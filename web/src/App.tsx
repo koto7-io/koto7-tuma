@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { ConnectionDetailPage } from "./pages/ConnectionDetailPage";
 import { IssuesPage } from "./pages/IssuesPage";
 import { MetricsPage } from "./pages/MetricsPage";
+import { PlaygroundPage } from "./pages/PlaygroundPage";
 import { api } from "./lib/api";
 import { usePageRestore } from "./lib/usePageRestore";
 
-export default function App() {
+function ConsoleApp() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [issueCount, setIssueCount] = useState(0);
 
@@ -50,4 +51,14 @@ export default function App() {
       </Routes>
     </Layout>
   );
+}
+
+export default function App() {
+  const location = useLocation();
+
+  if (location.pathname === "/playground" || location.pathname.startsWith("/playground/")) {
+    return <PlaygroundPage />;
+  }
+
+  return <ConsoleApp />;
 }

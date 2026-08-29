@@ -22,6 +22,7 @@ type Connection struct {
 	RetryFirstDelayS     int
 	RetryBackoffFactor   float64
 	RetentionDays        int
+	IsPlayground         bool
 	CreatedAt            time.Time
 }
 
@@ -89,19 +90,19 @@ func (s *Store) Ping(ctx context.Context) error {
 func (s *Store) CreateConnection(ctx context.Context, c *Connection) error {
 	return s.pool.QueryRow(ctx, `
 		INSERT INTO connections (name, source_type, inbound_path, destination_url, signing_secret_encrypted,
-			retry_attempts, retry_first_delay_s, retry_backoff_factor, retention_days)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			retry_attempts, retry_first_delay_s, retry_backoff_factor, retention_days, is_playground)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		RETURNING id, created_at
 	`, c.Name, c.SourceType, c.InboundPath, c.DestinationURL, c.SigningSecretEnc,
-		c.RetryAttempts, c.RetryFirstDelayS, c.RetryBackoffFactor, c.RetentionDays,
+		c.RetryAttempts, c.RetryFirstDelayS, c.RetryBackoffFactor, c.RetentionDays, c.IsPlayground,
 	).Scan(&c.ID, &c.CreatedAt)
 }
 
 func (s *Store) ListConnections(ctx context.Context) ([]Connection, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, source_type, inbound_path, destination_url, signing_secret_encrypted,
-			retry_attempts, retry_first_delay_s, retry_backoff_factor, retention_days, created_at
-		FROM connections ORDER BY created_at DESC
+			retry_attempts, retry_first_delay_s, retry_backoff_factor, retention_days, is_playground, created_at
+		FROM connections WHERE is_playground = FALSE ORDER BY created_at DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -112,7 +113,7 @@ func (s *Store) ListConnections(ctx context.Context) ([]Connection, error) {
 		var c Connection
 		if err := rows.Scan(&c.ID, &c.Name, &c.SourceType, &c.InboundPath, &c.DestinationURL,
 			&c.SigningSecretEnc, &c.RetryAttempts, &c.RetryFirstDelayS, &c.RetryBackoffFactor,
-			&c.RetentionDays, &c.CreatedAt); err != nil {
+			&c.RetentionDays, &c.IsPlayground, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -124,11 +125,11 @@ func (s *Store) GetConnection(ctx context.Context, id uuid.UUID) (*Connection, e
 	var c Connection
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, source_type, inbound_path, destination_url, signing_secret_encrypted,
-			retry_attempts, retry_first_delay_s, retry_backoff_factor, retention_days, created_at
+			retry_attempts, retry_first_delay_s, retry_backoff_factor, retention_days, is_playground, created_at
 		FROM connections WHERE id = $1
 	`, id).Scan(&c.ID, &c.Name, &c.SourceType, &c.InboundPath, &c.DestinationURL,
 		&c.SigningSecretEnc, &c.RetryAttempts, &c.RetryFirstDelayS, &c.RetryBackoffFactor,
-		&c.RetentionDays, &c.CreatedAt)
+		&c.RetentionDays, &c.IsPlayground, &c.CreatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -142,11 +143,11 @@ func (s *Store) GetConnectionByInboundPath(ctx context.Context, path string) (*C
 	var c Connection
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, source_type, inbound_path, destination_url, signing_secret_encrypted,
-			retry_attempts, retry_first_delay_s, retry_backoff_factor, retention_days, created_at
+			retry_attempts, retry_first_delay_s, retry_backoff_factor, retention_days, is_playground, created_at
 		FROM connections WHERE inbound_path = $1
 	`, path).Scan(&c.ID, &c.Name, &c.SourceType, &c.InboundPath, &c.DestinationURL,
 		&c.SigningSecretEnc, &c.RetryAttempts, &c.RetryFirstDelayS, &c.RetryBackoffFactor,
-		&c.RetentionDays, &c.CreatedAt)
+		&c.RetentionDays, &c.IsPlayground, &c.CreatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}

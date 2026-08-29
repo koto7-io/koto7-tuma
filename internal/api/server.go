@@ -19,6 +19,7 @@ import (
 	"github.com/koto7/tuma/internal/config"
 	"github.com/koto7/tuma/internal/crypto"
 	"github.com/koto7/tuma/internal/metrics"
+	"github.com/koto7/tuma/internal/playground"
 	"github.com/koto7/tuma/internal/storage"
 	tumawf "github.com/koto7/tuma/internal/workflow"
 )
@@ -28,12 +29,15 @@ type workflowStarter interface {
 }
 
 type Server struct {
-	cfg            *config.Config
-	store          *storage.Store
-	encryptor      *crypto.Encryptor
-	temporal       workflowStarter
-	logger         *slog.Logger
-	connCache      sync.Map // inbound_path -> cachedConnection
+	cfg               *config.Config
+	store             *storage.Store
+	encryptor         *crypto.Encryptor
+	temporal          workflowStarter
+	logger            *slog.Logger
+	connCache         sync.Map // inbound_path -> cachedConnection
+	playgroundHub     *playground.Hub
+	playgroundRL      *rateLimiter
+	playgroundStreams *streamLimiter
 }
 
 type cachedConnection struct {
@@ -43,7 +47,9 @@ type cachedConnection struct {
 }
 
 func NewServer(cfg *config.Config, store *storage.Store, enc *crypto.Encryptor, temporal workflowStarter, logger *slog.Logger) *Server {
-	return &Server{cfg: cfg, store: store, encryptor: enc, temporal: temporal, logger: logger}
+	s := &Server{cfg: cfg, store: store, encryptor: enc, temporal: temporal, logger: logger}
+	s.initPlayground()
+	return s
 }
 
 func (s *Server) Handler() http.Handler {
@@ -68,6 +74,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/issues/{id}", s.auth(s.getIssue))
 	mux.HandleFunc("POST /api/issues/{id}/replay", s.auth(s.replayIssue))
 	mux.HandleFunc("POST /api/issues/replay-bulk", s.auth(s.replayBulk))
+
+	mux.HandleFunc("GET /api/config", s.getConfig)
+	s.registerPlaygroundRoutes(mux)
 
 	return mux
 }

@@ -7,6 +7,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:8080",
       "/e": "http://localhost:8080",
+      "/playground/r": "http://localhost:8080",
     },
   },
 });
