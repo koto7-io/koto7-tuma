@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -38,9 +39,18 @@ func Load() (*Config, error) {
 	perConn, _ := strconv.Atoi(env("TUMA_PER_CONN_CONCURRENCY", "10"))
 	maxBody, _ := strconv.ParseInt(env("TUMA_MAX_BODY_BYTES", "1048576"), 10, 64)
 	sessionHours, _ := strconv.Atoi(env("TUMA_SESSION_TTL_HOURS", "168"))
-	demoMode := env("TUMA_DEMO_MODE", "") == "true"
+	publicBaseURL := env("TUMA_PUBLIC_BASE_URL", "http://localhost:8080")
+	demoMode := demoModeEnabled(publicBaseURL)
 	pgHours, _ := strconv.Atoi(env("TUMA_PLAYGROUND_SESSION_TTL_HOURS", "2"))
 	pgMax, _ := strconv.Atoi(env("TUMA_PLAYGROUND_MAX_SESSIONS", "500"))
+	pgInternal := env("TUMA_PLAYGROUND_INTERNAL_BASE", "")
+	if pgInternal == "" {
+		if demoMode {
+			pgInternal = "http://tuma-api:8080"
+		} else {
+			pgInternal = "http://127.0.0.1:8080"
+		}
+	}
 
 	return &Config{
 		DatabaseURL:        dbURL,
@@ -48,17 +58,30 @@ func Load() (*Config, error) {
 		TemporalNamespace:  env("TEMPORAL_NAMESPACE", "default"),
 		EncryptionKey:      []byte(key),
 		ListenAddr:         env("TUMA_LISTEN_ADDR", ":8080"),
-		PublicBaseURL:      env("TUMA_PUBLIC_BASE_URL", "http://localhost:8080"),
+		PublicBaseURL:      publicBaseURL,
 		SessionCookieName:  env("TUMA_SESSION_COOKIE", "tuma_session"),
 		SessionTTL:         time.Duration(sessionHours) * time.Hour,
 		MaxBodyBytes:       maxBody,
 		PerConnConcurrency: perConn,
 		LogLevel:           env("TUMA_LOG_LEVEL", "info"),
 		DemoMode:           demoMode,
-		PlaygroundInternalBase: env("TUMA_PLAYGROUND_INTERNAL_BASE", "http://127.0.0.1:8080"),
+		PlaygroundInternalBase: pgInternal,
 		PlaygroundSessionTTL:   time.Duration(pgHours) * time.Hour,
 		PlaygroundMaxSessions:  pgMax,
 	}, nil
+}
+
+// demoModeEnabled turns on playground routes when explicitly requested or when
+// TUMA_PUBLIC_BASE_URL points at the public demo host (unless TUMA_DEMO_MODE=false).
+func demoModeEnabled(publicBaseURL string) bool {
+	switch os.Getenv("TUMA_DEMO_MODE") {
+	case "true":
+		return true
+	case "false":
+		return false
+	default:
+		return strings.Contains(publicBaseURL, "tuma-demo.koto7.dev")
+	}
 }
 
 func env(key, fallback string) string {

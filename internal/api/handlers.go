@@ -128,10 +128,6 @@ type createConnectionRequest struct {
 }
 
 func (s *Server) createConnection(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.DemoMode {
-		http.Error(w, "connection creation disabled in demo mode", http.StatusForbidden)
-		return
-	}
 	var req createConnectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)

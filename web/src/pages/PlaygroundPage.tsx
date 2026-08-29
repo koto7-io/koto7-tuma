@@ -53,7 +53,7 @@ function LogPane({ lines }: { lines: string[] }) {
 }
 
 export function PlaygroundPage() {
-  const [bootstrapped, setBootstrapped] = useState(false);
+  const [ready, setReady] = useState<"loading" | "disabled" | "bootstrapping" | "ready">("loading");
   const [inboundURL, setInboundURL] = useState("");
   const [status, setStatus] = useState<PlaygroundStatus | null>(null);
   const [provider, setProvider] = useState("stripe");
@@ -76,26 +76,38 @@ export function PlaygroundPage() {
   }, []);
 
   useEffect(() => {
-    api.playgroundBootstrap()
-      .then((b) => {
-        setInboundURL(b.inbound_url);
-        setBootstrapped(true);
+    api.getConfig()
+      .then((c) => {
+        if (!c.demo_mode) {
+          setReady("disabled");
+          return;
+        }
+        setReady("bootstrapping");
+        return api.playgroundBootstrap();
       })
-      .catch((e) => setError(String(e)));
+      .then((b) => {
+        if (!b) return;
+        setInboundURL(b.inbound_url);
+        setReady("ready");
+      })
+      .catch((e) => {
+        setError(String(e));
+        setReady("disabled");
+      });
   }, []);
 
   useEffect(() => {
-    if (!bootstrapped) return;
+    if (ready !== "ready") return;
     const poll = () => {
       api.playgroundStatus().then(setStatus).catch(() => {});
     };
     poll();
     const id = setInterval(poll, 3000);
     return () => clearInterval(id);
-  }, [bootstrapped]);
+  }, [ready]);
 
   useEffect(() => {
-    if (!bootstrapped) return;
+    if (ready !== "ready") return;
     const es = new EventSource("/api/playground/stream", { withCredentials: true });
     es.addEventListener("sim", (e) => {
       try {
@@ -115,7 +127,7 @@ export function PlaygroundPage() {
       es.close();
     };
     return () => es.close();
-  }, [bootstrapped, appendSim, appendDest]);
+  }, [ready, appendSim, appendDest]);
 
   async function simulate(count: number, duplicate = false) {
     setBusy(true);
@@ -153,10 +165,28 @@ export function PlaygroundPage() {
     }
   }
 
-  if (!bootstrapped && !error) {
+  if (ready === "loading" || ready === "bootstrapping") {
     return (
       <div style={{ padding: 40, color: "var(--muted)" }}>
         Starting playground session…
+      </div>
+    );
+  }
+
+  if (ready === "disabled") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--bg)", padding: 40 }}>
+        <h1 style={{ fontFamily: "var(--mono)", fontSize: 20 }}>Playground unavailable</h1>
+        <p style={{ color: "var(--muted)", maxWidth: 520, lineHeight: 1.6 }}>
+          Demo mode is not enabled on this server. Set{" "}
+          <code>TUMA_DEMO_MODE=true</code> and{" "}
+          <code>TUMA_PUBLIC_BASE_URL=https://tuma-demo.koto7.dev</code> in{" "}
+          <code>deploy/.env</code>, then restart <code>tuma-api</code>.
+        </p>
+        {error && <p style={{ color: "var(--red)", marginTop: 16 }}>{error}</p>}
+        <Link to="/" style={{ display: "inline-block", marginTop: 20 }}>
+          Open console ↗
+        </Link>
       </div>
     );
   }

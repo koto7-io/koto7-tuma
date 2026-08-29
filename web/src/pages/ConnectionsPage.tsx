@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Connection } from "../lib/api";
 import { usePageRestore } from "../lib/usePageRestore";
@@ -24,14 +24,9 @@ export function ConnectionsPage() {
   const [signingSecret, setSigningSecret] = useState("");
   const [created, setCreated] = useState<{ connection: Connection; signing_secret: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
 
   usePageRestore(() => {
     api.listConnections().then((r) => setConnections(r.connections)).catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    api.getConfig().then((c) => setDemoMode(c.demo_mode)).catch(() => {});
   }, []);
 
   async function create(e: FormEvent) {
@@ -62,11 +57,9 @@ export function ConnectionsPage() {
             Inbound webhooks → reliable delivery to your apps
           </p>
         </div>
-        {!demoMode && (
-          <button style={buttonPrimary} onClick={() => { setWizard(true); setStep(0); setCreated(null); }}>
-            New connection
-          </button>
-        )}
+        <button style={buttonPrimary} onClick={() => { setWizard(true); setStep(0); setCreated(null); }}>
+          New connection
+        </button>
       </div>
 
       {wizard && (
