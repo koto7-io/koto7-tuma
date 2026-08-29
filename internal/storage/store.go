@@ -338,6 +338,14 @@ func (s *Store) GetIssue(ctx context.Context, id uuid.UUID) (*Issue, error) {
 	return &i, nil
 }
 
+func (s *Store) ResolveIssueByEventID(ctx context.Context, eventID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE issues SET status='resolved', resolved_at=NOW()
+		WHERE event_id=$1 AND status='open'
+	`, eventID)
+	return err
+}
+
 func (s *Store) ResolveIssue(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE issues SET status='resolved', resolved_at=NOW(), resolved_by=$2 WHERE id=$1

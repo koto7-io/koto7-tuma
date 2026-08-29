@@ -210,6 +210,12 @@ func (a *Activities) DeliverActivity(ctx context.Context, eventID uuid.UUID, att
 }
 
 func (a *Activities) RecordDelivered(ctx context.Context, eventID uuid.UUID, attempt int, result DeliverResult) error {
+	if err := a.Store.ResolveIssueByEventID(ctx, eventID); err != nil {
+		return err
+	}
+	if n, err := a.Store.OpenIssuesCount(ctx); err == nil {
+		metrics.SetDLQDepth(float64(n))
+	}
 	return nil
 }
 

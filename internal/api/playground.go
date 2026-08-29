@@ -343,9 +343,19 @@ func (s *Server) playgroundReplay(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session required", http.StatusUnauthorized)
 		return
 	}
+	if ps.FailDestination {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error":   "fix_first",
+			"message": "Fix the destination before replaying.",
+		})
+		return
+	}
 	issue, err := s.store.GetLatestOpenIssueForConnection(r.Context(), ps.ConnectionID)
 	if err != nil || issue == nil {
-		http.Error(w, "no open issue", http.StatusNotFound)
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error":   "no_open_issue",
+			"message": "No failed event yet. Break, send an event, wait for retries (~15s), then Fix and Replay.",
+		})
 		return
 	}
 	if err := s.startReplay(r.Context(), issue.EventID); err != nil {
