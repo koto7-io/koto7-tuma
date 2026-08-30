@@ -19,7 +19,7 @@ export function TumaLogo({
 }: TumaLogoProps) {
   const inner = (
     <>
-      <TumaMarkNav size={size} />
+      <TumaMarkNav size={size} className="tuma-logo__mark" />
       {wordmark && (
         <span className={`tuma-logo__wordmark${large ? " tuma-logo__wordmark--lg" : ""}`}>
           {wordmarkText}

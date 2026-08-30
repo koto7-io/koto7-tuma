@@ -12,6 +12,11 @@
   text-decoration: none;
 }
 
+.tuma-logo__mark {
+  display: block;
+  flex-shrink: 0;
+}
+
 .tuma-logo__wordmark {
   font-family: var(--brand);
   font-weight: 600;
@@ -157,8 +162,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 8px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   line-height: 0;
+  flex-shrink: 0;
+}
+
+.tuma-flow__mark-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  line-height: 0;
+}
+
+.tuma-flow__mark-loading img,
+.tuma-flow__mark-loading object,
+.tuma-flow__mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin: 0;
 }
 
 .tuma-flow__node--failing {

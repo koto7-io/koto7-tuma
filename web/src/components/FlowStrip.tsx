@@ -48,7 +48,7 @@ export function FlowStrip({
     tuma === "retrying" ? (
       <TumaBadgerLoading size={markSize} />
     ) : (
-      <TumaMarkNav size={markSize} />
+      <TumaMarkNav size={markSize} className="tuma-flow__mark" />
     );
 
   return (

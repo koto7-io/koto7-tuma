@@ -27,19 +27,14 @@
 
 .pg-header-brand .tuma-logo {
   gap: 12px;
-}
-
-.pg-header-title {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 18px;
-  letter-spacing: -0.02em;
+  align-items: center;
 }
 
 .pg-header-sub {
   font-size: 13px;
   color: var(--muted);
   margin-top: 4px;
+  padding-left: 48px;
 }
 
 .pg-back {
