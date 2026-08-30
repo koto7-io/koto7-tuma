@@ -1,0 +1,451 @@
+/* Shared Tuma UI primitives — marketing mirrors these tokens in Tailwind config */
+
+.tuma-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.tuma-logo:hover {
+  text-decoration: none;
+}
+
+.tuma-logo__wordmark {
+  font-family: var(--brand);
+  font-weight: 600;
+  font-size: var(--text-base);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.tuma-logo__wordmark--lg {
+  font-size: var(--text-lg);
+}
+
+.tuma-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.tuma-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tuma-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.tuma-btn--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.tuma-btn--primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.tuma-btn--secondary {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.tuma-btn--secondary:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tuma-btn--ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.tuma-btn--ghost:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.tuma-btn--danger {
+  background: var(--red-bg);
+  color: var(--red);
+  border-color: var(--red-border);
+}
+
+.tuma-btn--block {
+  width: 100%;
+}
+
+.tuma-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  background: var(--input-bg);
+  font-size: var(--text-sm);
+}
+
+.tuma-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tuma-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.tuma-flow__node {
+  padding: 4px 10px;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.tuma-flow__node--active {
+  border-color: var(--accent-dark);
+  color: var(--ink);
+  background: var(--nav-active-bg);
+}
+
+.tuma-flow__node--mark.tuma-flow__node--active {
+  box-shadow: 0 0 0 1px var(--accent-dark), 0 0 14px var(--mesh-glow);
+}
+
+.tuma-flow__node--mark.tuma-flow__node--retrying {
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px var(--mesh-glow-strong);
+}
+
+.tuma-flow__node--mark.tuma-flow__node--holding {
+  box-shadow: 0 0 0 1px var(--amber-border), 0 0 12px rgba(233, 196, 106, 0.25);
+  animation: tuma-flow-hold 2.5s ease-in-out infinite;
+}
+
+.tuma-flow__node--mark.tuma-flow__node--failing {
+  box-shadow: 0 0 0 1px var(--red-border), 0 0 10px rgba(232, 136, 122, 0.2);
+}
+
+.tuma-flow__node--mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  line-height: 0;
+}
+
+.tuma-flow__node--failing {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.tuma-flow__node--retrying {
+  border-color: var(--amber-border);
+  background: var(--amber-bg);
+  color: var(--ink);
+  animation: tuma-flow-pulse 1.4s ease-in-out infinite;
+}
+
+.tuma-flow__node--holding {
+  border-color: var(--amber-border);
+  background: var(--amber-bg);
+  color: var(--ink);
+}
+
+.tuma-flow__arrow {
+  color: var(--border);
+}
+
+.tuma-flow__arrow--lit {
+  color: var(--accent-dark);
+  animation: tuma-flow-arrow 1.6s ease-in-out infinite;
+}
+
+.tuma-flow__arrow--pulse {
+  color: var(--accent);
+  animation: tuma-flow-arrow 0.9s ease-in-out infinite;
+}
+
+.tuma-flow__mark-loading {
+  display: block;
+  line-height: 0;
+}
+
+.tuma-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 100px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.tuma-pill--healthy,
+.tuma-pill--delivered {
+  color: var(--green);
+  background: var(--green-bg);
+  border-color: var(--green-border);
+}
+
+.tuma-pill--degraded {
+  color: var(--amber);
+  background: var(--amber-bg);
+  border-color: var(--amber-border);
+}
+
+.tuma-pill--failing,
+.tuma-pill--open,
+.tuma-pill--failed {
+  color: var(--red);
+  background: var(--red-bg);
+  border-color: var(--red-border);
+}
+
+.tuma-pill--resolved {
+  color: var(--green);
+  background: var(--green-bg);
+  border-color: var(--green-border);
+}
+
+.tuma-auth {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  position: relative;
+}
+
+.tuma-auth__theme {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.tuma-auth__form {
+  width: 380px;
+  padding: 28px;
+  border-radius: var(--radius-lg);
+}
+
+.tuma-auth__title {
+  margin: 20px 0 6px;
+  font-size: var(--text-xl);
+}
+
+.tuma-auth__sub {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+
+.tuma-auth__field {
+  display: block;
+  font-size: var(--text-sm);
+  margin-bottom: 6px;
+}
+
+.tuma-auth__field + .tuma-input {
+  margin-bottom: 0;
+}
+
+.tuma-auth__field-spaced {
+  margin: 14px 0 6px;
+}
+
+.tuma-auth__error {
+  margin-top: 12px;
+}
+
+.tuma-auth__submit {
+  margin-top: 18px;
+}
+
+.tuma-theme-toggle {
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  width: 100%;
+  text-align: left;
+}
+
+.tuma-theme-toggle:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.tuma-theme-toggle--compact {
+  width: auto;
+}
+
+@keyframes tuma-flow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--amber-border);
+  }
+}
+
+@keyframes tuma-flow-arrow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes tuma-flow-hold {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px var(--amber-border), 0 0 8px rgba(233, 196, 106, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 1px var(--amber-border), 0 0 16px rgba(233, 196, 106, 0.35);
+  }
+}
+
+.tuma-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.tuma-card__head {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-light);
+  font-weight: 600;
+  font-size: var(--text-base);
+}
+
+.tuma-alert {
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: var(--text-sm);
+}
+
+.tuma-alert--success {
+  border: 1px solid var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-fg);
+}
+
+.tuma-alert--error {
+  border: 1px solid var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-fg);
+}
+
+/* App shell */
+.tuma-app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+}
+
+.tuma-sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tuma-sidebar__brand {
+  padding: 0 10px;
+}
+
+.tuma-sidebar__tagline {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin-top: 4px;
+  padding-left: 46px;
+}
+
+.tuma-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tuma-sidebar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: transparent;
+  text-decoration: none;
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.tuma-sidebar-nav:hover {
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.tuma-sidebar-nav--active {
+  color: var(--ink);
+  background: var(--nav-active-bg);
+}
+
+.tuma-sidebar__badge {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 100px;
+  background: var(--issue-badge-bg);
+  color: var(--issue-badge-fg);
+}
+
+.tuma-sidebar__footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tuma-main {
+  padding: 28px 32px;
+}

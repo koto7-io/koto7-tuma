@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, PlaygroundStatus, PlaygroundLogEvent } from "../lib/api";
-import { buttonPrimary, buttonSecondary, inputStyle } from "./LoginPage";
+import { Button } from "../components/Button";
+import { Pill } from "../components/Layout";
+import { FlowStrip, FlowNodeState } from "../components/FlowStrip";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { TumaBadgerLoading, TumaLogo } from "../components/TumaLogo";
+import "./PlaygroundPage.css";
 
 const MARKETING_URL = "https://tuma.koto7.io";
 
@@ -12,53 +17,38 @@ const PROVIDERS = [
 ];
 
 const STEPS = [
-  "Send an event — watch it land in the destination log",
-  "Break — simulates your app going down",
-  "Send again — Tuma retries, then opens an Issue (~15s)",
-  "Fix — your app is healthy again",
-  "Replay — Tuma re-delivers the failed event",
+  { title: "Send", body: "Watch a signed event deliver" },
+  { title: "Break", body: "Simulate your app going down" },
+  { title: "Send again", body: "Tuma retries, then opens an Issue" },
+  { title: "Wait ~15s", body: "Retries exhaust into Issues" },
+  { title: "Fix & Replay", body: "Restore destination, re-deliver" },
 ];
 
-const paneStyle: React.CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: 8,
-  display: "flex",
-  flexDirection: "column",
-  minHeight: 320,
-  overflow: "hidden",
-};
+function deriveFlowState(
+  status: PlaygroundStatus | null,
+  waitingForIssue: boolean,
+  busy: boolean,
+): { provider: FlowNodeState; tuma: FlowNodeState; destination: FlowNodeState } {
+  if (!status) {
+    return { provider: "default", tuma: "active", destination: "default" };
+  }
 
-const logStyle: React.CSSProperties = {
-  flex: 1,
-  margin: 0,
-  padding: 12,
-  fontFamily: "var(--mono)",
-  fontSize: 12,
-  lineHeight: 1.5,
-  overflow: "auto",
-  background: "var(--code-bg)",
-  color: "var(--ink)",
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
-};
-
-function statusColor(status: string): string {
-  if (status === "failing") return "var(--red)";
-  if (status === "degraded") return "var(--amber)";
-  return "var(--green)";
-}
-
-function LogPane({ lines }: { lines: string[] }) {
-  const ref = useRef<HTMLPreElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [lines]);
-  return (
-    <pre ref={ref} style={logStyle}>
-      {lines.length ? lines.join("\n") : "— waiting for events —"}
-    </pre>
-  );
+  if (status.fail_destination && waitingForIssue) {
+    return { provider: "active", tuma: "retrying", destination: "failing" };
+  }
+  if (status.fail_destination && status.open_issues > 0) {
+    return { provider: "active", tuma: "holding", destination: "failing" };
+  }
+  if (status.fail_destination) {
+    return { provider: "active", tuma: "active", destination: "failing" };
+  }
+  if (status.open_issues > 0) {
+    return { provider: "active", tuma: "holding", destination: "default" };
+  }
+  if (status.status === "delivering" || busy) {
+    return { provider: "active", tuma: "active", destination: "active" };
+  }
+  return { provider: "active", tuma: "active", destination: "active" };
 }
 
 function friendlyPlaygroundError(e: unknown): string {
@@ -98,6 +88,52 @@ function statusHint(status: PlaygroundStatus | null, waitingForIssue: boolean): 
   return "Healthy. Try Break → Send to see the failure story.";
 }
 
+function deriveStepProgress(
+  status: PlaygroundStatus | null,
+  waitingForIssue: boolean,
+  hasDestLog: boolean,
+): number {
+  if (!status) return 0;
+  if (status.open_issues > 0 && !status.fail_destination) return 4;
+  if (status.open_issues > 0 && status.fail_destination) return 3;
+  if (status.fail_destination && waitingForIssue) return 2;
+  if (status.fail_destination) return 1;
+  if (hasDestLog) return 0;
+  return 0;
+}
+
+function colorLogLine(line: string): string {
+  if (/\b502\b|fail_mode|\bfailed\b/i.test(line)) return "pg-log-fail";
+  if (/\b200\b|\bok\b/i.test(line)) return "pg-log-ok";
+  return "";
+}
+
+function LogPane({ lines }: { lines: string[] }) {
+  const ref = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [lines]);
+
+  if (!lines.length) {
+    return (
+      <pre ref={ref} className="pg-log">
+        <span className="pg-log-empty">— waiting for events —</span>
+      </pre>
+    );
+  }
+
+  return (
+    <pre ref={ref} className="pg-log">
+      {lines.map((line, i) => (
+        <span key={i} className={colorLogLine(line)}>
+          {line}
+          {i < lines.length - 1 ? "\n" : ""}
+        </span>
+      ))}
+    </pre>
+  );
+}
+
 export function PlaygroundPage() {
   const [ready, setReady] = useState<"loading" | "disabled" | "bootstrapping" | "ready">("loading");
   const [inboundURL, setInboundURL] = useState("");
@@ -113,6 +149,20 @@ export function PlaygroundPage() {
   const openIssues = status?.open_issues ?? 0;
   const broken = status?.fail_destination ?? false;
   const canReplay = openIssues > 0 && !broken;
+  const activeStep = deriveStepProgress(status, waitingForIssue, destLog.length > 0);
+  const hint = statusHint(status, waitingForIssue);
+  const pillStatus = status?.status === "delivering" ? "healthy" : (status?.status ?? "healthy");
+  const flow = deriveFlowState(status, waitingForIssue, busy);
+
+  const stepStates = useMemo(
+    () =>
+      STEPS.map((_, i) => {
+        if (i < activeStep) return "done" as const;
+        if (i === activeStep) return "active" as const;
+        return "pending" as const;
+      }),
+    [activeStep],
+  );
 
   const appendSim = useCallback((ev: PlaygroundLogEvent) => {
     const line = ev.line || JSON.stringify(ev);
@@ -176,9 +226,7 @@ export function PlaygroundPage() {
         /* ignore */
       }
     });
-    es.onerror = () => {
-      es.close();
-    };
+    es.onerror = () => es.close();
     return () => es.close();
   }, [ready, appendSim, appendDest]);
 
@@ -212,9 +260,7 @@ export function PlaygroundPage() {
       if (action === "break") await api.playgroundBreak();
       else if (action === "fix") await api.playgroundFix();
       else await api.playgroundReplay();
-      if (action === "replay") {
-        setWaitingForIssue(false);
-      }
+      if (action === "replay") setWaitingForIssue(false);
     } catch (e) {
       setError(friendlyPlaygroundError(e));
     } finally {
@@ -224,164 +270,139 @@ export function PlaygroundPage() {
 
   if (ready === "loading" || ready === "bootstrapping") {
     return (
-      <div style={{ padding: 40, color: "var(--muted)" }}>
-        Starting playground session…
+      <div className="pg-loading">
+        <div className="pg-loading-inner">
+          <TumaBadgerLoading size={96} />
+          <span>Starting your isolated demo session…</span>
+        </div>
       </div>
     );
   }
 
   if (ready === "disabled") {
     return (
-      <div style={{ minHeight: "100vh", background: "var(--bg)", padding: 40 }}>
-        <h1 style={{ fontFamily: "var(--mono)", fontSize: 20 }}>Playground temporarily unavailable</h1>
-        <p style={{ color: "var(--muted)", maxWidth: 520, lineHeight: 1.6 }}>
-          The live demo is starting up or briefly offline. Try again in a minute, or head back to the Tuma site.
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 24 }}>
-          <a href="/playground" style={{ fontSize: 14 }}>Try again</a>
-          <a href={MARKETING_URL} style={{ fontSize: 14 }}>Back to tuma.koto7.io ↗</a>
+      <div className="pg-unavailable">
+        <div className="pg-unavailable-inner">
+          <h1>Playground temporarily unavailable</h1>
+          <p>The live demo is starting up or briefly offline. Try again in a minute.</p>
+          <div className="pg-unavailable-links">
+            <a href="/playground" className="pg-back">Try again</a>
+            <a href={MARKETING_URL} className="pg-back">Back to tuma.koto7.io ↗</a>
+          </div>
         </div>
       </div>
     );
   }
 
-  const pill = status?.status || "delivering";
-  const hint = statusHint(status, waitingForIssue);
-
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <header
-        style={{
-          padding: "16px 24px",
-          borderBottom: "1px solid var(--border)",
-          background: "var(--surface)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
-        <div>
-          <div style={{ fontFamily: "var(--mono)", fontWeight: 600, fontSize: 18 }}>tuma playground</div>
-          <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>
-            Simulated provider · Demo destination · Real Tuma stack
+    <div className="pg-root">
+      <div className="pg-shell">
+        <header className="pg-header">
+          <div className="pg-header-brand">
+            <TumaLogo size={36} wordmarkText="tuma" large />
+            <div className="pg-header-sub">playground · Simulated provider · Demo destination · Real Tuma stack</div>
           </div>
-        </div>
-        <a href={MARKETING_URL} style={{ fontSize: 14 }}>
-          Back to tuma.koto7.io ↗
-        </a>
-      </header>
-
-      <div style={{ padding: "12px 24px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: 8 }}>TRY THE FAILURE STORY</div>
-        <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, lineHeight: 1.7, color: "var(--ink)" }}>
-          {STEPS.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      </div>
-
-      {error && (
-        <div style={{ padding: "12px 24px", color: "var(--red)", fontSize: 14 }}>{error}</div>
-      )}
-
-      <div
-        style={{
-          padding: 24,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: 16,
-        }}
-      >
-        <div style={paneStyle}>
-          <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", fontWeight: 600, fontSize: 13 }}>
-            LIVE STATUS
+          <div className="pg-header-actions">
+            <ThemeToggle compact />
+            <a href={MARKETING_URL} className="pg-back">tuma.koto7.io ↗</a>
           </div>
-          <div style={{ padding: 14, flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
-                  background: statusColor(pill),
-                }}
-              />
-              <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{pill}</span>
-              {broken && (
-                <span style={{ fontSize: 12, color: "var(--red)" }}>(destination broken)</span>
+        </header>
+
+        <FlowStrip provider={flow.provider} tuma={flow.tuma} destination={flow.destination} />
+
+        <section className="pg-steps">
+          <div className="pg-steps-label">Try the failure story</div>
+          <ol className="pg-step-list">
+            {STEPS.map((step, i) => (
+              <li key={step.title} className={`pg-step ${stepStates[i]}`}>
+                <span className="pg-step-num">{stepStates[i] === "done" ? "✓" : i + 1}</span>
+                <span>
+                  <strong>{step.title}</strong>
+                  <br />
+                  {step.body}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {error && <div className="pg-alert tuma-alert tuma-alert--error">{error}</div>}
+
+        <div className="pg-grid">
+          <div className="pg-pane">
+            <div className="pg-pane-head">
+              <span className="pg-pane-title">Live status</span>
+              <Pill status={pillStatus} />
+            </div>
+            <div className="pg-pane-body">
+              {hint && (
+                <p className={`pg-hint ${waitingForIssue ? "waiting" : ""}`}>{hint}</p>
               )}
-            </div>
-            {hint && (
-              <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 12px", lineHeight: 1.5 }}>{hint}</p>
-            )}
-            <div style={{ fontSize: 14, lineHeight: 1.8 }}>
-              <div>Delivered (24h): <strong>{status?.delivered_24h ?? 0}</strong></div>
-              <div>Open issues: <strong>{openIssues}</strong></div>
-            </div>
-            {inboundURL && (
-              <div style={{ marginTop: 16, fontSize: 12, color: "var(--muted)" }}>
-                Your isolated inbound URL (this session only)
-                <div style={{ fontFamily: "var(--mono)", fontSize: 11, wordBreak: "break-all", marginTop: 4, color: "var(--ink)" }}>
-                  {inboundURL}
+              <div className="pg-stats">
+                <div className="pg-stat">
+                  <div className="pg-stat-label">Delivered (24h)</div>
+                  <div className="pg-stat-value">{status?.delivered_24h ?? 0}</div>
+                </div>
+                <div className="pg-stat">
+                  <div className="pg-stat-label">Open issues</div>
+                  <div className={`pg-stat-value${openIssues > 0 ? " pg-stat-value--alert" : ""}`}>
+                    {openIssues}
+                  </div>
                 </div>
               </div>
-            )}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 20 }}>
-              <button style={buttonSecondary} disabled={busy || broken} onClick={() => control("break")} title={broken ? "Already broken" : "Simulate destination failure"}>
-                Break
-              </button>
-              <button style={buttonSecondary} disabled={busy || !broken} onClick={() => control("fix")} title={!broken ? "Destination is healthy" : "Restore destination"}>
-                Fix
-              </button>
-              <button
-                style={buttonPrimary}
-                disabled={busy || !canReplay}
-                onClick={() => control("replay")}
-                title={!canReplay ? "Need an open Issue and a fixed destination" : "Re-deliver the failed event"}
+              {inboundURL && (
+                <div className="pg-url-box">
+                  Your session URL
+                  <div className="pg-url">{inboundURL}</div>
+                </div>
+              )}
+              <div className="pg-actions">
+                <Button variant="danger" disabled={busy || broken} onClick={() => control("break")}>
+                  Break
+                </Button>
+                <Button variant="secondary" disabled={busy || !broken} onClick={() => control("fix")}>
+                  Fix
+                </Button>
+                <Button disabled={busy || !canReplay} onClick={() => control("replay")}>
+                  Replay
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="pg-pane">
+            <div className="pg-pane-head">
+              <span className="pg-pane-title">Provider simulator</span>
+            </div>
+            <div className="pg-pane-body pg-pane-body--sim">
+              <label className="pg-field-label">Provider</label>
+              <select
+                className="tuma-input pg-provider-select"
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
               >
-                Replay
-              </button>
+                {PROVIDERS.map((p) => (
+                  <option key={p.key} value={p.key}>{p.label}</option>
+                ))}
+              </select>
+              <div className="pg-actions pg-actions--flush">
+                <Button disabled={busy} onClick={() => simulate(1)}>Send 1</Button>
+                <Button variant="secondary" disabled={busy} onClick={() => simulate(5)}>Send 5</Button>
+                <Button variant="ghost" disabled={busy || !lastDupId.current} onClick={() => simulate(1, true)}>
+                  Duplicate
+                </Button>
+              </div>
             </div>
+            <LogPane lines={simLog} />
           </div>
-        </div>
 
-        <div style={paneStyle}>
-          <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", fontWeight: 600, fontSize: 13 }}>
-            PROVIDER SIMULATOR
-          </div>
-          <div style={{ padding: 14 }}>
-            <label style={{ fontSize: 12, color: "var(--muted)" }}>Provider</label>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              style={{ ...inputStyle, width: "100%", marginTop: 4, marginBottom: 12 }}
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p.key} value={p.key}>{p.label}</option>
-              ))}
-            </select>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <button style={buttonPrimary} disabled={busy} onClick={() => simulate(1)}>
-                Send 1
-              </button>
-              <button style={buttonSecondary} disabled={busy} onClick={() => simulate(5)}>
-                Send 5
-              </button>
-              <button style={buttonSecondary} disabled={busy || !lastDupId.current} onClick={() => simulate(1, true)}>
-                Send duplicate
-              </button>
+          <div className="pg-pane">
+            <div className="pg-pane-head">
+              <span className="pg-pane-title">Destination log</span>
+              {broken && <Pill status="failing" />}
             </div>
+            <LogPane lines={destLog} />
           </div>
-          <LogPane lines={simLog} />
-        </div>
-
-        <div style={paneStyle}>
-          <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", fontWeight: 600, fontSize: 13 }}>
-            DESTINATION LOG
-          </div>
-          <LogPane lines={destLog} />
         </div>
       </div>
     </div>

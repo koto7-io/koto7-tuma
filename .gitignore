@@ -7,3 +7,4 @@ deploy/.env
 *.tsbuildinfo
 web/node_modules/
 web/dist/
+/graphify-out

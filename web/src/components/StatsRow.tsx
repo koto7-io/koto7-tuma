@@ -3,8 +3,8 @@ import { ConnectionStats } from "../lib/types";
 export function StatCell({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>{label}</div>
-      <div style={{ fontFamily: "var(--mono)", fontSize: 15, fontWeight: 500 }}>{value}</div>
+      <div className="tuma-stat-cell__label">{label}</div>
+      <div className="tuma-stat-cell__value">{value}</div>
     </div>
   );
 }
@@ -12,7 +12,7 @@ export function StatCell({ label, value }: { label: string; value: string | numb
 export function ConnectionStatsRow({ stats }: { stats?: ConnectionStats }) {
   const s = stats ?? { delivered_24h: 0, p95_latency_ms: 0, failed_count: 0, status: "healthy" as const };
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginTop: 12 }}>
+    <div className="tuma-stats-row">
       <StatCell label="Delivered (24h)" value={s.delivered_24h.toLocaleString()} />
       <StatCell label="p95 latency" value={s.p95_latency_ms > 0 ? `${s.p95_latency_ms} ms` : "—"} />
       <StatCell label="Open issues" value={s.failed_count} />
@@ -25,29 +25,23 @@ export function HourlyBars({ data, label }: { data: { hour: string; count: numbe
   const max = Math.max(1, ...rows.map((d) => d.count));
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{label}</div>
+      <div className="tuma-hourly__label">{label}</div>
       {rows.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>No activity in the last 24 hours.</p>
+        <p className="tuma-empty">No activity in the last 24 hours.</p>
       ) : (
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
+        <div className="tuma-hourly__bars">
           {rows.map((d) => (
             <div
               key={d.hour}
               title={`${formatHour(d.hour)}: ${d.count}`}
-              style={{
-                flex: 1,
-                minWidth: 4,
-                height: `${Math.max(4, (d.count / max) * 100)}%`,
-                background: "var(--accent)",
-                borderRadius: "2px 2px 0 0",
-                opacity: 0.85,
-              }}
+              className="tuma-hourly__bar"
+              style={{ height: `${Math.max(4, (d.count / max) * 100)}%` }}
             />
           ))}
         </div>
       )}
       {rows.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "var(--muted)", fontFamily: "var(--mono)" }}>
+        <div className="tuma-hourly__axis">
           <span>{formatHour(rows[0].hour)}</span>
           <span>{formatHour(rows[rows.length - 1].hour)}</span>
         </div>

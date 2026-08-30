@@ -2,9 +2,10 @@ import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Connection } from "../lib/api";
 import { usePageRestore } from "../lib/usePageRestore";
+import { Button } from "../components/Button";
 import { Card, Pill } from "../components/Layout";
+import { PageHeader } from "../components/PageHeader";
 import { ConnectionStatsRow } from "../components/StatsRow";
-import { buttonPrimary, buttonSecondary, inputStyle } from "./LoginPage";
 
 const SOURCES = [
   { key: "stripe", name: "Stripe", sub: "Events API" },
@@ -50,99 +51,101 @@ export function ConnectionsPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 24 }}>Connections</h1>
-          <p style={{ margin: "6px 0 0", color: "var(--muted)", fontSize: 14 }}>
-            Inbound webhooks → reliable delivery to your apps
-          </p>
-        </div>
-        <button style={buttonPrimary} onClick={() => { setWizard(true); setStep(0); setCreated(null); }}>
-          New connection
-        </button>
-      </div>
+      <PageHeader
+        title="Connections"
+        subtitle="Inbound webhooks → reliable delivery to your apps"
+        action={
+          <Button onClick={() => { setWizard(true); setStep(0); setCreated(null); }}>
+            New connection
+          </Button>
+        }
+      />
 
       {wizard && (
         <Card title="New connection">
-          <div style={{ padding: 16 }}>
+          <div className="tuma-card-body">
             {step === 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+              <div className="tuma-source-grid">
                 {SOURCES.map((s) => (
                   <button
                     key={s.key}
                     type="button"
                     onClick={() => { setSource(s.key); setStep(1); }}
-                    style={{
-                      textAlign: "left",
-                      padding: 14,
-                      borderRadius: 8,
-                      border: `1px solid ${source === s.key ? "var(--ink)" : "var(--border)"}`,
-                      background: "var(--input-bg)",
-                      cursor: "pointer",
-                    }}
+                    className={`tuma-source-btn${source === s.key ? " tuma-source-btn--selected" : ""}`}
                   >
-                    <div style={{ fontWeight: 600 }}>{s.name}</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)" }}>{s.sub}</div>
+                    <div className="tuma-source-btn__name">{s.name}</div>
+                    <div className="tuma-source-btn__sub">{s.sub}</div>
                   </button>
                 ))}
               </div>
             )}
             {step === 1 && (
               <form onSubmit={create}>
-                <label style={{ fontSize: 13 }}>Name</label>
-                <input style={{ ...inputStyle, marginTop: 6, marginBottom: 14 }} value={name} onChange={(e) => setName(e.target.value)} required />
-                <label style={{ fontSize: 13 }}>Destination URL</label>
-                <input style={{ ...inputStyle, marginTop: 6, marginBottom: 14 }} value={dest} onChange={(e) => setDest(e.target.value)} placeholder="https://api.example.com/webhooks" required />
+                <label className="tuma-field">
+                  <span className="tuma-field__label">Name</span>
+                  <input className="tuma-input" value={name} onChange={(e) => setName(e.target.value)} required />
+                </label>
+                <label className="tuma-field">
+                  <span className="tuma-field__label">Destination URL</span>
+                  <input
+                    className="tuma-input"
+                    value={dest}
+                    onChange={(e) => setDest(e.target.value)}
+                    placeholder="https://api.example.com/webhooks"
+                    required
+                  />
+                </label>
                 {source !== "internal" && (
-                  <>
-                    <label style={{ fontSize: 13 }}>Signing secret</label>
-                    <input style={{ ...inputStyle, marginTop: 6, marginBottom: 14 }} value={signingSecret} onChange={(e) => setSigningSecret(e.target.value)} placeholder={source === "stripe" ? "whsec_..." : "From provider dashboard"} />
-                  </>
+                  <label className="tuma-field">
+                    <span className="tuma-field__label">Signing secret</span>
+                    <input
+                      className="tuma-input"
+                      value={signingSecret}
+                      onChange={(e) => setSigningSecret(e.target.value)}
+                      placeholder={source === "stripe" ? "whsec_..." : "From provider dashboard"}
+                    />
+                  </label>
                 )}
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button type="button" style={buttonSecondary} onClick={() => setStep(0)}>Back</button>
-                  <button type="submit" style={buttonPrimary}>Create</button>
+                <div className="tuma-field-row">
+                  <Button type="button" variant="secondary" onClick={() => setStep(0)}>Back</Button>
+                  <Button type="submit">Create</Button>
                 </div>
               </form>
             )}
             {step === 2 && created && (
               <div>
-                <p style={{ color: "var(--muted)", fontSize: 14 }}>
+                <p className="tuma-page-sub">
                   Paste this into your {source} endpoint settings. Nothing else changes.
                 </p>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Webhook URL</div>
-                <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                  <code style={{ flex: 1, fontFamily: "var(--mono)", fontSize: 12, background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 6, padding: 10 }}>
-                    {created.connection.inbound_url}
-                  </code>
-                  <button style={buttonSecondary} onClick={() => copy(created.connection.inbound_url)}>
+                <div className="tuma-field-caption">Webhook URL</div>
+                <div className="tuma-code-row tuma-mb-16">
+                  <code className="tuma-code">{created.connection.inbound_url}</code>
+                  <Button variant="secondary" onClick={() => copy(created.connection.inbound_url)}>
                     {copied ? "Copied" : "Copy"}
-                  </button>
+                  </Button>
                 </div>
                 {created.signing_secret && (
                   <>
-                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Signing secret</div>
-                    <code style={{ display: "block", fontFamily: "var(--mono)", fontSize: 12, background: "var(--code-bg)", border: "1px solid var(--border)", borderRadius: 6, padding: 10 }}>
-                      {created.signing_secret}
-                    </code>
+                    <div className="tuma-field-caption">Signing secret</div>
+                    <code className="tuma-code tuma-code--block">{created.signing_secret}</code>
                   </>
                 )}
-                <button style={{ ...buttonPrimary, marginTop: 16 }} onClick={() => setWizard(false)}>Done</button>
+                <Button className="tuma-mt-16" onClick={() => setWizard(false)}>Done</Button>
               </div>
             )}
           </div>
         </Card>
       )}
 
-      <div style={{ display: "grid", gap: 12, marginTop: wizard ? 16 : 0 }}>
+      <div className={`tuma-stack${wizard ? " tuma-mt-16" : ""}`}>
         {connections.map((c) => (
-          <Link key={c.id} to={`/connections/${c.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+          <Link key={c.id} to={`/connections/${c.id}`} className="tuma-link-card">
             <Card>
-              <div style={{ padding: "14px 16px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "start" }}>
+              <div className="tuma-card-body tuma-pad-card">
+                <div className="tuma-conn-row__top">
                   <div>
-                    <div style={{ fontWeight: 600 }}>{c.name}</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--mono)", marginTop: 4 }}>
+                    <div className="tuma-conn-row__title">{c.name}</div>
+                    <div className="tuma-conn-row__meta">
                       {c.source_type} → {c.destination_url}
                     </div>
                   </div>
@@ -154,7 +157,7 @@ export function ConnectionsPage() {
           </Link>
         ))}
         {connections.length === 0 && !wizard && (
-          <p style={{ color: "var(--muted)" }}>No connections yet. Create one to get started.</p>
+          <p className="tuma-empty">No connections yet. Create one to get started.</p>
         )}
       </div>
     </div>

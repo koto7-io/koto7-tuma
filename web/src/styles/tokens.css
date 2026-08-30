@@ -1,3 +1,41 @@
+/* Mesh brand palette — shared across themes (SVG / glow references) */
+:root {
+  --mesh-a: #38fff6;
+  --mesh-b: #20e2d7;
+  --mesh-c: #02c39a;
+  --mesh-stroke-1: #20e2d7;
+  --mesh-stroke-2: #11b5ac;
+  --mesh-stroke-3: #38fff6;
+  --mesh-stroke-4: #1cd3c8;
+  --mesh-stroke-5: #0ea199;
+  --mesh-stroke-6: #05668d;
+  --mesh-stroke-7: #00a896;
+  --mesh-stroke-8: #02c39a;
+  --mesh-node-ring: #38fff6;
+  --mesh-node-lead: #ffffff;
+  --mesh-glow: rgba(56, 255, 246, 0.35);
+  --mesh-glow-strong: rgba(56, 255, 246, 0.55);
+
+  /* Layout */
+  --sidebar-width: 236px;
+  --content-max: 1200px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  /* Typography */
+  --sans: "Inter", system-ui, sans-serif;
+  --brand: "IBM Plex Mono", monospace;
+  --mono: "JetBrains Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 34px;
+  --label-tracking: 0.18em;
+}
+
 :root,
 [data-theme="light"] {
   color-scheme: light;
@@ -7,17 +45,19 @@
   --muted: #5c594d;
   --border: #dedcd4;
   --border-light: #f0eee8;
-  --accent: #e9c46a;
-  --accent-dark: #8a5a0b;
-  --link: #8a5a0b;
+  /* Mesh-adapted UI accent — readable on warm light surfaces */
+  --accent: #028578;
+  --accent-dark: #05668d;
+  --on-accent: #0a0a0a;
+  --link: #05668d;
   --link-hover: #16150f;
-  --nav-active-bg: #e4e1d8;
+  --nav-active-bg: #e4f5f2;
   --input-bg: #ffffff;
   --code-bg: #ffffff;
   --row-selected: #f4f2ec;
   --overlay: rgba(22, 21, 15, 0.25);
-  --issue-badge-bg: #f2dcc4;
-  --issue-badge-fg: #8a3e12;
+  --issue-badge-bg: #e4f5f2;
+  --issue-badge-fg: #05668d;
   --green: #2f7d57;
   --green-bg: #e4f0e9;
   --green-border: #b7d8c6;
@@ -27,30 +67,37 @@
   --red: #9c3226;
   --red-bg: #f8e7e4;
   --red-border: #ebc4be;
-  --sidebar-width: 236px;
-  --mono: "IBM Plex Mono", monospace;
-  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --success-fg: #2f7d57;
+  --success-bg: #e4f0e9;
+  --success-border: #b7d8c6;
+  --error-fg: #9c3226;
+  --error-bg: #f8e7e4;
+  --error-border: #ebc4be;
+  /* Light theme mesh glow is subtler */
+  --mesh-glow: rgba(2, 133, 120, 0.22);
+  --mesh-glow-strong: rgba(2, 133, 120, 0.38);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f0e0c;
-  --surface: #181612;
-  --ink: #eceae3;
-  --muted: #9a9688;
-  --border: #2e2b24;
-  --border-light: #211f1a;
-  --accent: #e9c46a;
-  --accent-dark: #f0d078;
-  --link: #e9c46a;
-  --link-hover: #eceae3;
-  --nav-active-bg: #262319;
-  --input-bg: #12110e;
-  --code-bg: #12110e;
-  --row-selected: #221f18;
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --ink: #f5f5f5;
+  --muted: #888888;
+  --border: #1f1f1f;
+  --border-light: #1a1a1a;
+  --accent: #38fff6;
+  --accent-dark: #20e2d7;
+  --on-accent: #0a0a0a;
+  --link: #38fff6;
+  --link-hover: #f5f5f5;
+  --nav-active-bg: #0f1f1e;
+  --input-bg: #121110;
+  --code-bg: #121110;
+  --row-selected: #151515;
   --overlay: rgba(0, 0, 0, 0.55);
-  --issue-badge-bg: #3d2a14;
-  --issue-badge-fg: #f0c078;
+  --issue-badge-bg: #0f2a28;
+  --issue-badge-fg: #38fff6;
   --green: #6ecf98;
   --green-bg: #152820;
   --green-border: #2a4d38;
@@ -60,6 +107,14 @@
   --red: #e8887a;
   --red-bg: #2a1816;
   --red-border: #5a322c;
+  --success-fg: #6ecf98;
+  --success-bg: #102019;
+  --success-border: #2a4a3f;
+  --error-fg: #f2a3a3;
+  --error-bg: #251313;
+  --error-border: #5c2b2b;
+  --mesh-glow: rgba(56, 255, 246, 0.35);
+  --mesh-glow-strong: rgba(56, 255, 246, 0.55);
 }
 
 * {
@@ -88,7 +143,7 @@ a:hover {
 
 ::selection {
   background: var(--accent);
-  color: var(--ink);
+  color: var(--on-accent);
 }
 
 button,
@@ -102,4 +157,14 @@ input,
 select,
 textarea {
   background: var(--input-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

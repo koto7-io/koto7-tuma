@@ -8,16 +8,23 @@
       (function () {
         var k = "tuma-theme";
         var t = localStorage.getItem(k);
-        var dark =
-          t === "dark" ||
-          (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var dark;
+        if (t === "light") dark = false;
+        else if (t === "dark") dark = true;
+        else if (t === "system") dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        else dark = true;
         document.documentElement.dataset.theme = dark ? "dark" : "light";
         document.documentElement.style.colorScheme = dark ? "dark" : "light";
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://tuma.koto7.io/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="https://tuma.koto7.io/favicon-16x16.png" />
   </head>
   <body>
     <div id="root"></div>

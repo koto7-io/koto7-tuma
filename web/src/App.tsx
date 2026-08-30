@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "./components/Layout";
+import { TumaBadgerLoading } from "./components/TumaLogo";
 import { LoginPage } from "./pages/LoginPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { ConnectionDetailPage } from "./pages/ConnectionDetailPage";
@@ -27,7 +28,14 @@ function ConsoleApp() {
   }, [authed]);
 
   if (authed === null) {
-    return <div style={{ padding: 40, color: "var(--muted)" }}>Loading…</div>;
+    return (
+      <div className="pg-loading">
+        <div className="pg-loading-inner">
+          <TumaBadgerLoading size={96} />
+          <span>Loading…</span>
+        </div>
+      </div>
+    );
   }
 
   if (!authed) {
