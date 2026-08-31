@@ -289,7 +289,6 @@ cd web && npm install && npm run dev  # terminal 3
 
 ## Architecture & scope
 
-- Design docs: `docs/tuma-technical-design.md`, `docs/tuma-cursor-build-brief.md`
 - **v1 included:** connections, retries, issues/DLQ + replay, session auth, in-app metrics, Prometheus/Grafana, dark mode
 - **Not in v1:** multi-tenancy, billing, RBAC, transformations
 
