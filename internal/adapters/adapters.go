@@ -35,13 +35,16 @@ func Get(sourceType string) (SourceAdapter, error) {
 
 type StripeAdapter struct{}
 
+const stripeTolerance = 5 * time.Minute
+
 func (StripeAdapter) Verify(headers http.Header, body []byte, secret string) bool {
+	secret = strings.TrimSpace(secret)
 	sig := headers.Get("Stripe-Signature")
 	if sig == "" || secret == "" {
 		return false
 	}
 	var ts int64
-	var v1s []string
+	var v1s [][]byte
 	for _, part := range strings.Split(sig, ",") {
 		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
 		if len(kv) != 2 {
@@ -51,21 +54,26 @@ func (StripeAdapter) Verify(headers http.Header, body []byte, secret string) boo
 		case "t":
 			ts, _ = strconv.ParseInt(kv[1], 10, 64)
 		case "v1":
-			v1s = append(v1s, kv[1])
+			decoded, err := hex.DecodeString(kv[1])
+			if err != nil {
+				continue
+			}
+			v1s = append(v1s, decoded)
 		}
 	}
 	if ts == 0 || len(v1s) == 0 {
 		return false
 	}
-	if time.Since(time.Unix(ts, 0)) > 5*time.Minute {
+	if time.Since(time.Unix(ts, 0)) > stripeTolerance {
 		return false
 	}
-	payload := fmt.Sprintf("%d.%s", ts, string(body))
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(payload))
-	expected := hex.EncodeToString(mac.Sum(nil))
+	fmt.Fprintf(mac, "%d", ts)
+	mac.Write([]byte("."))
+	mac.Write(body)
+	expected := mac.Sum(nil)
 	for _, v := range v1s {
-		if hmac.Equal([]byte(v), []byte(expected)) {
+		if hmac.Equal(v, expected) {
 			return true
 		}
 	}

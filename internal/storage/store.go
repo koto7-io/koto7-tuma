@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/koto7/tuma/internal/crypto"
 )
 
 type Connection struct {
@@ -76,11 +78,12 @@ type Session struct {
 }
 
 type Store struct {
-	pool *pgxpool.Pool
+	pool       *pgxpool.Pool
+	payloadEnc *crypto.Encryptor
 }
 
-func New(pool *pgxpool.Pool) *Store {
-	return &Store{pool: pool}
+func New(pool *pgxpool.Pool, payloadEnc *crypto.Encryptor) *Store {
+	return &Store{pool: pool, payloadEnc: payloadEnc}
 }
 
 func (s *Store) Ping(ctx context.Context) error {
@@ -157,10 +160,13 @@ func (s *Store) GetConnectionByInboundPath(ctx context.Context, path string) (*C
 	return &c, nil
 }
 
-func (s *Store) UpdateConnection(ctx context.Context, id uuid.UUID, dest *string, retryAttempts, retryFirstDelayS *int, retryBackoff *float64, retentionDays *int) (*Connection, error) {
+func (s *Store) UpdateConnection(ctx context.Context, id uuid.UUID, name, dest *string, retryAttempts, retryFirstDelayS *int, retryBackoff *float64, retentionDays *int) (*Connection, error) {
 	c, err := s.GetConnection(ctx, id)
 	if err != nil || c == nil {
 		return c, err
+	}
+	if name != nil {
+		c.Name = *name
 	}
 	if dest != nil {
 		c.DestinationURL = *dest
@@ -178,10 +184,21 @@ func (s *Store) UpdateConnection(ctx context.Context, id uuid.UUID, dest *string
 		c.RetentionDays = *retentionDays
 	}
 	_, err = s.pool.Exec(ctx, `
-		UPDATE connections SET destination_url=$2, retry_attempts=$3, retry_first_delay_s=$4,
-			retry_backoff_factor=$5, retention_days=$6 WHERE id=$1
-	`, id, c.DestinationURL, c.RetryAttempts, c.RetryFirstDelayS, c.RetryBackoffFactor, c.RetentionDays)
+		UPDATE connections SET name=$2, destination_url=$3, retry_attempts=$4, retry_first_delay_s=$5,
+			retry_backoff_factor=$6, retention_days=$7 WHERE id=$1
+	`, id, c.Name, c.DestinationURL, c.RetryAttempts, c.RetryFirstDelayS, c.RetryBackoffFactor, c.RetentionDays)
 	return c, err
+}
+
+func (s *Store) UpdateConnectionSecret(ctx context.Context, id uuid.UUID, enc []byte) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE connections SET signing_secret_encrypted=$2 WHERE id=$1`, id, enc)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }
 
 type InsertEventResult struct {
@@ -190,14 +207,18 @@ type InsertEventResult struct {
 }
 
 func (s *Store) InsertEvent(ctx context.Context, e *Event) (*InsertEventResult, error) {
+	headersEnc, payloadEnc, err := s.sealEventFields(e.RawHeaders, e.RawPayload)
+	if err != nil {
+		return nil, err
+	}
 	var id uuid.UUID
 	var receivedAt time.Time
-	err := s.pool.QueryRow(ctx, `
-		INSERT INTO events (connection_id, provider_event_id, raw_headers, raw_payload)
-		VALUES ($1,$2,$3,$4)
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO events (connection_id, provider_event_id, raw_headers, raw_payload, payload_encrypted)
+		VALUES ($1,$2,$3,$4,TRUE)
 		ON CONFLICT (connection_id, provider_event_id) DO NOTHING
 		RETURNING id, received_at
-	`, e.ConnectionID, e.ProviderEventID, e.RawHeaders, e.RawPayload).Scan(&id, &receivedAt)
+	`, e.ConnectionID, e.ProviderEventID, headersEnc, payloadEnc).Scan(&id, &receivedAt)
 	if err == pgx.ErrNoRows {
 		existing, err2 := s.GetEventByProviderID(ctx, e.ConnectionID, e.ProviderEventID)
 		if err2 != nil {
@@ -213,36 +234,41 @@ func (s *Store) InsertEvent(ctx context.Context, e *Event) (*InsertEventResult, 
 	return &InsertEventResult{Event: e, Inserted: true}, nil
 }
 
-func (s *Store) GetEventByProviderID(ctx context.Context, connID uuid.UUID, providerID string) (*Event, error) {
+func (s *Store) scanEvent(row interface {
+	Scan(dest ...any) error
+}) (*Event, error) {
 	var e Event
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, connection_id, provider_event_id, raw_headers, raw_payload, received_at, workflow_id
-		FROM events WHERE connection_id=$1 AND provider_event_id=$2
-	`, connID, providerID).Scan(&e.ID, &e.ConnectionID, &e.ProviderEventID, &e.RawHeaders,
-		&e.RawPayload, &e.ReceivedAt, &e.WorkflowID)
+	var headersEnc, payloadEnc []byte
+	var encrypted bool
+	err := row.Scan(&e.ID, &e.ConnectionID, &e.ProviderEventID, &headersEnc,
+		&payloadEnc, &encrypted, &e.ReceivedAt, &e.WorkflowID)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	headers, payload, err := s.openEventFields(headersEnc, payloadEnc, encrypted)
+	if err != nil {
+		return nil, err
+	}
+	e.RawHeaders = headers
+	e.RawPayload = payload
 	return &e, nil
 }
 
+func (s *Store) GetEventByProviderID(ctx context.Context, connID uuid.UUID, providerID string) (*Event, error) {
+	return s.scanEvent(s.pool.QueryRow(ctx, `
+		SELECT id, connection_id, provider_event_id, raw_headers, raw_payload, payload_encrypted, received_at, workflow_id
+		FROM events WHERE connection_id=$1 AND provider_event_id=$2
+	`, connID, providerID))
+}
+
 func (s *Store) GetEvent(ctx context.Context, id uuid.UUID) (*Event, error) {
-	var e Event
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, connection_id, provider_event_id, raw_headers, raw_payload, received_at, workflow_id
+	return s.scanEvent(s.pool.QueryRow(ctx, `
+		SELECT id, connection_id, provider_event_id, raw_headers, raw_payload, payload_encrypted, received_at, workflow_id
 		FROM events WHERE id=$1
-	`, id).Scan(&e.ID, &e.ConnectionID, &e.ProviderEventID, &e.RawHeaders,
-		&e.RawPayload, &e.ReceivedAt, &e.WorkflowID)
-	if err == pgx.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &e, nil
+	`, id))
 }
 
 func (s *Store) SetEventWorkflowID(ctx context.Context, eventID uuid.UUID, workflowID string) error {

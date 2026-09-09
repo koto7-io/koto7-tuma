@@ -13,6 +13,7 @@ type Config struct {
 	TemporalHost       string
 	TemporalNamespace  string
 	EncryptionKey      []byte
+	PayloadKey         []byte
 	ListenAddr         string
 	PublicBaseURL      string
 	SessionCookieName  string
@@ -33,6 +34,11 @@ func Load() (*Config, error) {
 	}
 	if len(key) != 32 {
 		return nil, fmt.Errorf("TUMA_ENCRYPTION_KEY must be exactly 32 bytes")
+	}
+
+	payloadKey := []byte(env("TUMA_PAYLOAD_KEY", string(key)))
+	if len(payloadKey) != 32 {
+		return nil, fmt.Errorf("TUMA_PAYLOAD_KEY must be exactly 32 bytes when set")
 	}
 
 	dbURL := env("DATABASE_URL", "postgres://tuma:tuma@localhost:5432/tuma?sslmode=disable")
@@ -57,6 +63,7 @@ func Load() (*Config, error) {
 		TemporalHost:       env("TEMPORAL_HOST", "localhost:7233"),
 		TemporalNamespace:  env("TEMPORAL_NAMESPACE", "default"),
 		EncryptionKey:      []byte(key),
+		PayloadKey:         payloadKey,
 		ListenAddr:         env("TUMA_LISTEN_ADDR", ":8080"),
 		PublicBaseURL:      publicBaseURL,
 		SessionCookieName:  env("TUMA_SESSION_COOKIE", "tuma_session"),

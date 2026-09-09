@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, Connection } from "../lib/api";
 import { usePageRestore } from "../lib/usePageRestore";
 import { Button } from "../components/Button";
@@ -25,9 +25,12 @@ export function ConnectionsPage() {
   const [signingSecret, setSigningSecret] = useState("");
   const [created, setCreated] = useState<{ connection: Connection; signing_secret: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [sinkURL, setSinkURL] = useState("");
+  const navigate = useNavigate();
 
   usePageRestore(() => {
     api.listConnections().then((r) => setConnections(r.connections)).catch(console.error);
+    api.getConfig().then((c) => setSinkURL(c.sink_url)).catch(console.error);
   }, []);
 
   async function create(e: FormEvent) {
@@ -94,6 +97,14 @@ export function ConnectionsPage() {
                     placeholder="https://api.example.com/webhooks"
                     required
                   />
+                  {sinkURL && (
+                    <span className="tuma-field-caption">
+                      No app yet?{" "}
+                      <button type="button" className="tuma-text-btn" onClick={() => setDest(sinkURL)}>
+                        Use Tuma test receiver
+                      </button>
+                    </span>
+                  )}
                 </label>
                 {source !== "internal" && (
                   <label className="tuma-field">
@@ -102,8 +113,13 @@ export function ConnectionsPage() {
                       className="tuma-input"
                       value={signingSecret}
                       onChange={(e) => setSigningSecret(e.target.value)}
-                      placeholder={source === "stripe" ? "whsec_..." : "From provider dashboard"}
+                      placeholder={source === "stripe" ? "whsec_… from Stripe Dashboard" : "From provider dashboard"}
                     />
+                    {source === "stripe" && (
+                      <span className="tuma-field-caption">
+                        Must be the secret Stripe shows after you add the webhook URL (Reveal secret). Tuma cannot invent this — a generated whsec_ will 401 every real Stripe event.
+                      </span>
+                    )}
                   </label>
                 )}
                 <div className="tuma-field-row">
@@ -115,7 +131,9 @@ export function ConnectionsPage() {
             {step === 2 && created && (
               <div>
                 <p className="tuma-page-sub">
-                  Paste this into your {source} endpoint settings. Nothing else changes.
+                  {source === "stripe"
+                    ? "Paste this URL into Stripe Dashboard → Developers → Webhooks. Then paste Stripe’s signing secret on the connection page — not a Tuma-generated one."
+                    : `Paste this into your ${source} endpoint settings. Nothing else changes.`}
                 </p>
                 <div className="tuma-field-caption">Webhook URL</div>
                 <div className="tuma-code-row tuma-mb-16">
@@ -124,11 +142,16 @@ export function ConnectionsPage() {
                     {copied ? "Copied" : "Copy"}
                   </Button>
                 </div>
-                {created.signing_secret && (
+                {created.signing_secret && source !== "stripe" && (
                   <>
                     <div className="tuma-field-caption">Signing secret</div>
                     <code className="tuma-code tuma-code--block">{created.signing_secret}</code>
                   </>
+                )}
+                {source === "stripe" && (
+                  <p className="tuma-field-caption">
+                    Open the connection and save the <code className="tuma-code">whsec_</code> Stripe shows under Reveal secret. Until that matches, Stripe will get 401 invalid signature.
+                  </p>
                 )}
                 <Button className="tuma-mt-16" onClick={() => setWizard(false)}>Done</Button>
               </div>
@@ -139,22 +162,25 @@ export function ConnectionsPage() {
 
       <div className={`tuma-stack${wizard ? " tuma-mt-16" : ""}`}>
         {connections.map((c) => (
-          <Link key={c.id} to={`/connections/${c.id}`} className="tuma-link-card">
-            <Card>
-              <div className="tuma-card-body tuma-pad-card">
-                <div className="tuma-conn-row__top">
-                  <div>
-                    <div className="tuma-conn-row__title">{c.name}</div>
-                    <div className="tuma-conn-row__meta">
-                      {c.source_type} → {c.destination_url}
-                    </div>
+          <Card key={c.id}>
+            <div className="tuma-card-body tuma-pad-card">
+              <div className="tuma-conn-row__top">
+                <div>
+                  <div className="tuma-conn-row__title">{c.name}</div>
+                  <div className="tuma-conn-row__meta">
+                    {c.source_type} → {c.destination_url}
                   </div>
-                  <Pill status={c.stats?.status ?? "healthy"} />
                 </div>
-                <ConnectionStatsRow stats={c.stats} />
+                <div className="tuma-conn-row__actions">
+                  <Pill status={c.stats?.status ?? "healthy"} />
+                  <Button onClick={() => navigate(`/connections/${c.id}`)}>Edit</Button>
+                </div>
               </div>
-            </Card>
-          </Link>
+              <Link to={`/connections/${c.id}`} className="tuma-link-card">
+                <ConnectionStatsRow stats={c.stats} />
+              </Link>
+            </div>
+          </Card>
         ))}
         {connections.length === 0 && !wizard && (
           <p className="tuma-empty">No connections yet. Create one to get started.</p>

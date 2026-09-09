@@ -30,11 +30,11 @@ func (n *noopTemporal) ExecuteWorkflow(_ context.Context, _ client.StartWorkflow
 func TestIngestAckAfterCommit(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
-	store := storage.New(pool)
 	enc, err := crypto.NewEncryptor([]byte("01234567890123456789012345678901"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	store := storage.New(pool, enc)
 
 	encSecret, _ := enc.Encrypt("ignored")
 	conn := &storage.Connection{
@@ -82,11 +82,11 @@ func TestIngestAckAfterCommit(t *testing.T) {
 func TestIngestDuplicateAcksWithoutSecondWorkflow(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
-	store := storage.New(pool)
 	enc, err := crypto.NewEncryptor([]byte("01234567890123456789012345678901"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	store := storage.New(pool, enc)
 
 	encSecret, _ := enc.Encrypt("ignored")
 	conn := &storage.Connection{

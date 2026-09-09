@@ -38,6 +38,7 @@ type Server struct {
 	playgroundHub     *playground.Hub
 	playgroundRL      *rateLimiter
 	playgroundStreams *streamLimiter
+	sink              *echoSink
 }
 
 type cachedConnection struct {
@@ -47,7 +48,7 @@ type cachedConnection struct {
 }
 
 func NewServer(cfg *config.Config, store *storage.Store, enc *crypto.Encryptor, temporal workflowStarter, logger *slog.Logger) *Server {
-	s := &Server{cfg: cfg, store: store, encryptor: enc, temporal: temporal, logger: logger}
+	s := &Server{cfg: cfg, store: store, encryptor: enc, temporal: temporal, logger: logger, sink: newEchoSink()}
 	s.initPlayground()
 	return s
 }
@@ -59,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /metrics", promhttp.Handler())
 
 	mux.HandleFunc("POST /e/{path}", s.ingest)
+	mux.HandleFunc("POST /sink/echo", s.sinkReceive)
 	mux.HandleFunc("POST /api/auth/login", s.login)
 	mux.HandleFunc("POST /api/auth/logout", s.logout)
 
@@ -74,6 +76,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/issues/{id}", s.auth(s.getIssue))
 	mux.HandleFunc("POST /api/issues/{id}/replay", s.auth(s.replayIssue))
 	mux.HandleFunc("POST /api/issues/replay-bulk", s.auth(s.replayBulk))
+
+	mux.HandleFunc("GET /api/sink", s.auth(s.getSink))
+	mux.HandleFunc("POST /api/sink/break", s.auth(s.sinkBreak))
+	mux.HandleFunc("POST /api/sink/fix", s.auth(s.sinkFix))
 
 	mux.HandleFunc("GET /api/config", s.getConfig)
 	s.registerPlaygroundRoutes(mux)
@@ -133,6 +139,11 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 	}
 	if !adapter.Verify(r.Header, body, secret) {
 		metrics.IngestionTotal.WithLabelValues(conn.ID.String(), "invalid_signature").Inc()
+		s.logger.Warn("ingest rejected: invalid signature",
+			"connection_id", conn.ID,
+			"source_type", conn.SourceType,
+			"has_stripe_signature", r.Header.Get("Stripe-Signature") != "",
+		)
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
 	}

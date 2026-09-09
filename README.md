@@ -59,6 +59,7 @@ The default Compose file is for **local dev**. Treat these as public if you expo
 |---|---|---|
 | **TUMA admin password** | Auto-generated or `TUMA_ADMIN_PASSWORD` | Set a strong password in `deploy/.env` before first boot in shared/staging/prod. Store in your password manager — not Slack. |
 | **TUMA_ENCRYPTION_KEY** | Hardcoded 32-byte demo key in compose | Generate a unique key per environment. **Never rotate** without re-entering all connection signing secrets. |
+| **Webhook payloads** | Encrypted at rest in Postgres | Optional separate `TUMA_PAYLOAD_KEY` (32 bytes); defaults to encryption key. Retention enforced hourly per connection `retention_days`. |
 | **Postgres** | `tuma` / `tuma` on internal network only | Use strong `POSTGRES_PASSWORD` + `DATABASE_URL` for anything beyond localhost. |
 | **Grafana** | `admin` / `tuma` on **:3001** | Change `GF_SECURITY_ADMIN_PASSWORD`. Consider not publishing `:3001` to the internet (VPN / SSH tunnel). |
 | **Signing secrets** | Shown once when creating a connection | Copy into Stripe/GitHub dashboard; Tuma encrypts at rest. Don't commit secrets to git. |

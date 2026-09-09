@@ -137,7 +137,7 @@ func (s *Server) createConnection(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing required fields", http.StatusBadRequest)
 		return
 	}
-	secret := req.SigningSecret
+	secret := strings.TrimSpace(req.SigningSecret)
 	if secret == "" && req.SourceType != "internal" {
 		secret = randomSecret()
 	}
@@ -218,11 +218,13 @@ func (s *Server) getConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchConnectionRequest struct {
+	Name               *string  `json:"name"`
 	DestinationURL     *string  `json:"destination_url"`
 	RetryAttempts      *int     `json:"retry_attempts"`
 	RetryFirstDelayS   *int     `json:"retry_first_delay_s"`
 	RetryBackoffFactor *float64 `json:"retry_backoff_factor"`
 	RetentionDays      *int     `json:"retention_days"`
+	SigningSecret      *string  `json:"signing_secret"`
 }
 
 func (s *Server) patchConnection(w http.ResponseWriter, r *http.Request) {
@@ -236,12 +238,29 @@ func (s *Server) patchConnection(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	c, err := s.store.UpdateConnection(r.Context(), id, req.DestinationURL, req.RetryAttempts,
+	c, err := s.store.UpdateConnection(r.Context(), id, req.Name, req.DestinationURL, req.RetryAttempts,
 		req.RetryFirstDelayS, req.RetryBackoffFactor, req.RetentionDays)
 	if err != nil || c == nil {
 		http.NotFound(w, r)
 		return
 	}
+	if req.SigningSecret != nil {
+		secret := strings.TrimSpace(*req.SigningSecret)
+		if secret == "" {
+			http.Error(w, "signing_secret cannot be empty", http.StatusBadRequest)
+			return
+		}
+		enc, err := s.encryptor.Encrypt(secret)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if err := s.store.UpdateConnectionSecret(r.Context(), id, enc); err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+	s.connCache.Delete(c.InboundPath)
 	writeJSON(w, http.StatusOK, toConnectionResponse(s.cfg.PublicBaseURL, *c))
 }
 

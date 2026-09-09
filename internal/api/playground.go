@@ -44,6 +44,7 @@ func (s *Server) registerPlaygroundRoutes(mux *http.ServeMux) {
 func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"demo_mode": s.cfg.DemoMode,
+		"sink_url":  s.sinkURL(),
 	})
 }
 

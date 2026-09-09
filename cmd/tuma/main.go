@@ -57,11 +57,23 @@ func main() {
 	}
 	defer pool.Close()
 
-	store := storage.New(pool)
 	enc, err := crypto.NewEncryptor(cfg.EncryptionKey)
 	if err != nil {
 		logger.Error("encryptor init failed", "error", err)
 		os.Exit(1)
+	}
+	payloadEnc, err := crypto.NewEncryptor(cfg.PayloadKey)
+	if err != nil {
+		logger.Error("payload encryptor init failed", "error", err)
+		os.Exit(1)
+	}
+	store := storage.New(pool, payloadEnc)
+
+	if n, err := store.BackfillPayloadEncryption(context.Background()); err != nil {
+		logger.Error("payload encryption backfill failed", "error", err)
+		os.Exit(1)
+	} else if n > 0 {
+		logger.Info("encrypted legacy event payloads", "count", n)
 	}
 
 	if err := bootstrapAdmin(context.Background(), store, logger); err != nil {
@@ -121,6 +133,8 @@ func runAPI(cfg *config.Config, store *storage.Store, enc *crypto.Encryptor, tem
 	if n, err := store.OpenIssuesCount(context.Background()); err == nil {
 		metrics.SetDLQDepth(float64(n))
 	}
+
+	go runRetentionLoop(store, logger)
 
 	srv := api.NewServer(cfg, store, enc, temporal, logger)
 	server := &http.Server{
@@ -261,4 +275,23 @@ func waitShutdown(server *http.Server, logger *slog.Logger) {
 	defer cancel()
 	_ = server.Shutdown(ctx)
 	logger.Info("api stopped")
+}
+
+func runRetentionLoop(store *storage.Store, logger *slog.Logger) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	runOnce := func() {
+		n, err := store.PurgeExpiredEvents(context.Background())
+		if err != nil {
+			logger.Error("retention purge failed", "error", err)
+			return
+		}
+		if n > 0 {
+			logger.Info("retention purge completed", "events_deleted", n)
+		}
+	}
+	runOnce()
+	for range ticker.C {
+		runOnce()
+	}
 }

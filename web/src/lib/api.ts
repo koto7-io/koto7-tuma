@@ -26,6 +26,14 @@ export type PlaygroundBootstrap = {
   destination_fail: boolean;
 };
 
+export type SinkEvent = {
+  ts: string;
+  status: number;
+  delivery_id?: string;
+  attempt?: string;
+  body: string;
+};
+
 export type Delivery = {
   id: string;
   event_id: string;
@@ -82,7 +90,7 @@ export const api = {
       "/api/connections",
       { method: "POST", body: JSON.stringify(body) }
     ),
-  patchConnection: (id: string, body: Partial<Connection>) =>
+  patchConnection: (id: string, body: Partial<Connection> & { signing_secret?: string }) =>
     request<Connection>(`/api/connections/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
@@ -101,7 +109,11 @@ export const api = {
       body: JSON.stringify({ ids }),
     }),
   getMetrics: () => request<PlatformMetrics>("/api/metrics"),
-  getConfig: () => request<{ demo_mode: boolean }>("/api/config"),
+  getConfig: () => request<{ demo_mode: boolean; sink_url: string }>("/api/config"),
+  getSink: () =>
+    request<{ url: string; fail: boolean; events: SinkEvent[] }>("/api/sink"),
+  sinkBreak: () => request<{ fail: boolean }>("/api/sink/break", { method: "POST" }),
+  sinkFix: () => request<{ fail: boolean }>("/api/sink/fix", { method: "POST" }),
   playgroundBootstrap: () => request<PlaygroundBootstrap>("/api/playground/bootstrap"),
   playgroundStatus: () => request<PlaygroundStatus>("/api/playground/status"),
   playgroundSimulate: (body: { provider: string; count: number; duplicate_event_id?: string }) =>
