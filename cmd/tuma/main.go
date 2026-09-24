@@ -22,10 +22,12 @@ import (
 	"go.temporal.io/sdk/worker"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/koto7/tuma/internal/alerting"
 	"github.com/koto7/tuma/internal/api"
 	"github.com/koto7/tuma/internal/config"
 	"github.com/koto7/tuma/internal/crypto"
 	"github.com/koto7/tuma/internal/metrics"
+	"github.com/koto7/tuma/internal/notification"
 	"github.com/koto7/tuma/internal/storage"
 	"github.com/koto7/tuma/internal/workflow"
 )
@@ -172,6 +174,23 @@ func runWorker(cfg *config.Config, store *storage.Store, enc *crypto.Encryptor, 
 	w.RegisterActivity(acts.DeliverActivity)
 	w.RegisterActivity(acts.RecordDelivered)
 	w.RegisterActivity(acts.RecordIssue)
+
+	// Build the notification chain: SMTP sender → service.
+	// When SMTP_HOST is empty the sender is still constructed but will fail
+	// gracefully at send-time (best-effort, errors are logged not fatal).
+	smtpSender := notification.NewSMTPSender(notification.SMTPConfig{
+		Host:     cfg.SMTP.Host,
+		Port:     cfg.SMTP.Port,
+		Username: cfg.SMTP.Username,
+		Password: cfg.SMTP.Password,
+		From:     cfg.SMTP.From,
+	})
+	notifSvc := notification.NewService(smtpSender, logger)
+
+	// Launch alert evaluator alongside the Temporal worker.
+	evalCtx, cancelEval := context.WithCancel(context.Background())
+	defer cancelEval()
+	go alerting.New(store, notifSvc, cfg.AlertEvalInterval, logger).Run(evalCtx)
 
 	logger.Info("worker starting", "task_queue", workflow.TaskQueue)
 	if err := w.Run(worker.InterruptCh()); err != nil {
