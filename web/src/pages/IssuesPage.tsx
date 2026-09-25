@@ -4,6 +4,7 @@ import { usePageRestore } from "../lib/usePageRestore";
 import { Button } from "../components/Button";
 import { Card, Pill } from "../components/Layout";
 import { PageHeader } from "../components/PageHeader";
+import { AlertRulesPanel } from "../components/AlertRulesPanel";
 
 export function IssuesPage() {
   const [filter, setFilter] = useState("open");
@@ -118,6 +119,8 @@ export function IssuesPage() {
           );
         })}
       </Card>
+
+      <AlertRulesPanel />
 
       {drawer && (
         <div className="tuma-drawer-overlay" onClick={() => setDrawerId(null)}>

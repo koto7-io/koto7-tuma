@@ -1,4 +1,19 @@
 export type { Connection, ConnectionStats, PlatformMetrics, HourlyCount } from "./types";
+
+export type AlertRule = {
+  id: string;
+  name: string;
+  rule_type: "OPEN_ISSUES" | "DELIVERY_SUCCESS" | "UNRESOLVED_TIME";
+  threshold: number;
+  unit: "COUNT" | "PERCENT" | "HOURS";
+  active: boolean;
+  notification_type: string;
+  notification_dest: string;
+  subject_template?: string | null;
+  body_template?: string | null;
+  created_at: string;
+  updated_at: string;
+};
 import type { Connection, PlatformMetrics } from "./types";
 
 export type PlaygroundLogEvent = {
@@ -114,6 +129,23 @@ export const api = {
     request<{ url: string; fail: boolean; events: SinkEvent[] }>("/api/sink"),
   sinkBreak: () => request<{ fail: boolean }>("/api/sink/break", { method: "POST" }),
   sinkFix: () => request<{ fail: boolean }>("/api/sink/fix", { method: "POST" }),
+  getConfig: () => request<{ demo_mode: boolean }>("/api/config"),
+  listAlertRules: () =>
+    request<{ alert_rules: AlertRule[]; active_count: number; total_count: number }>("/api/alert-rules"),
+  createAlertRule: (body: {
+    name: string;
+    rule_type: string;
+    threshold: number;
+    unit: string;
+    notification_type: string;
+    notification_dest: string;
+    subject_template?: string;
+    body_template?: string;
+  }) => request<{ alert_rule: AlertRule }>("/api/alert-rules", { method: "POST", body: JSON.stringify(body) }),
+  patchAlertRule: (id: string, body: { active?: boolean; threshold?: number; subject_template?: string | null; body_template?: string | null }) =>
+    request<AlertRule>(`/api/alert-rules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteAlertRule: (id: string) =>
+    request<void>(`/api/alert-rules/${id}`, { method: "DELETE" }),
   playgroundBootstrap: () => request<PlaygroundBootstrap>("/api/playground/bootstrap"),
   playgroundStatus: () => request<PlaygroundStatus>("/api/playground/status"),
   playgroundSimulate: (body: { provider: string; count: number; duplicate_event_id?: string }) =>

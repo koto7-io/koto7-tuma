@@ -455,3 +455,168 @@ func GenerateInboundPath() string {
 func InboundURL(base, path string) string {
 	return fmt.Sprintf("%s/e/%s", base, path)
 }
+
+// ─── Alert Rules ─────────────────────────────────────────────────────────────
+
+// AlertRule mirrors the alert_rules DB table.
+type AlertRule struct {
+	ID               uuid.UUID `json:"id"`
+	Name             string    `json:"name"`
+	RuleType         string    `json:"rule_type"`
+	Threshold        float64   `json:"threshold"`
+	Unit             string    `json:"unit"`
+	Active           bool      `json:"active"`
+	NotificationType string    `json:"notification_type"`
+	NotificationDest string    `json:"notification_dest"`
+	SubjectTemplate  *string   `json:"subject_template"`
+	BodyTemplate     *string   `json:"body_template"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// AlertNotification mirrors the alert_notifications DB table.
+type AlertNotification struct {
+	ID           uuid.UUID `json:"id"`
+	AlertRuleID  uuid.UUID `json:"alert_rule_id"`
+	RuleName     string    `json:"rule_name"`
+	RuleType     string    `json:"rule_type"`
+	Threshold    float64   `json:"threshold"`
+	CurrentValue float64   `json:"current_value"`
+	FiredAt      time.Time `json:"fired_at"`
+}
+
+func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, name, rule_type, threshold, unit, active,
+		       notification_type, notification_dest, subject_template, body_template, created_at, updated_at
+		FROM alert_rules ORDER BY created_at ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AlertRule
+	for rows.Next() {
+		var r AlertRule 
+		if err := rows.Scan(&r.ID, &r.Name, &r.RuleType, &r.Threshold, &r.Unit, &r.Active,
+			&r.NotificationType, &r.NotificationDest, &r.SubjectTemplate, &r.BodyTemplate, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CountAlertRules(ctx context.Context) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM alert_rules`).Scan(&n)
+	return n, err
+}
+
+func (s *Store) CreateAlertRule(ctx context.Context, r *AlertRule) error {
+	return s.pool.QueryRow(ctx, `
+		INSERT INTO alert_rules (name, rule_type, threshold, unit, active, notification_type, notification_dest, subject_template, body_template)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		RETURNING id, created_at, updated_at
+	`, r.Name, r.RuleType, r.Threshold, r.Unit, r.Active, r.NotificationType, r.NotificationDest, r.SubjectTemplate, r.BodyTemplate,
+	).Scan(&r.ID, &r.CreatedAt, &r.UpdatedAt)
+}
+
+func (s *Store) GetAlertRule(ctx context.Context, id uuid.UUID) (*AlertRule, error) {
+	var r AlertRule
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, name, rule_type, threshold, unit, active,
+		       notification_type, notification_dest, subject_template, body_template, created_at, updated_at
+		FROM alert_rules WHERE id=$1
+	`, id).Scan(&r.ID, &r.Name, &r.RuleType, &r.Threshold, &r.Unit, &r.Active,
+		&r.NotificationType, &r.NotificationDest, &r.SubjectTemplate, &r.BodyTemplate, &r.CreatedAt, &r.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// UpdateAlertRule applies a partial update (PATCH semantics) — only non-nil fields are changed.
+func (s *Store) UpdateAlertRule(ctx context.Context, id uuid.UUID, active *bool, threshold *float64, subjectTemplate *string, bodyTemplate *string) (*AlertRule, error) {
+	r, err := s.GetAlertRule(ctx, id)
+	if err != nil || r == nil {
+		return r, err
+	}
+	if active != nil {
+		r.Active = *active
+	}
+	if threshold != nil {
+		r.Threshold = *threshold
+	}
+	if subjectTemplate != nil {
+		r.SubjectTemplate = subjectTemplate
+	}
+	if bodyTemplate != nil {
+		r.BodyTemplate = bodyTemplate
+	}
+	err = s.pool.QueryRow(ctx, `
+		UPDATE alert_rules SET active=$1, threshold=$2, subject_template=$3, body_template=$4, updated_at=NOW()
+		WHERE id=$5
+		RETURNING updated_at
+	`, r.Active, r.Threshold, r.SubjectTemplate, r.BodyTemplate, id).Scan(&r.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (s *Store) DeleteAlertRule(ctx context.Context, id uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM alert_rules WHERE id=$1`, id)
+	return err
+}
+
+// ─── Alert Notifications ──────────────────────────────────────────────────────
+
+func (s *Store) RecordAlertNotification(ctx context.Context, n *AlertNotification) error {
+	return s.pool.QueryRow(ctx, `
+		INSERT INTO alert_notifications (alert_rule_id, rule_name, rule_type, threshold, current_value)
+		VALUES ($1,$2,$3,$4,$5)
+		RETURNING id, fired_at
+	`, n.AlertRuleID, n.RuleName, n.RuleType, n.Threshold, n.CurrentValue,
+	).Scan(&n.ID, &n.FiredAt)
+}
+
+func (s *Store) ListAlertNotifications(ctx context.Context, limit int) ([]AlertNotification, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, alert_rule_id, rule_name, rule_type, threshold, current_value, fired_at
+		FROM alert_notifications
+		ORDER BY fired_at DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AlertNotification
+	for rows.Next() {
+		var n AlertNotification
+		if err := rows.Scan(&n.ID, &n.AlertRuleID, &n.RuleName, &n.RuleType,
+			&n.Threshold, &n.CurrentValue, &n.FiredAt); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// OldestOpenIssueAge returns how many hours the oldest open issue has been open.
+// Returns 0 if there are no open issues.
+func (s *Store) OldestOpenIssueAge(ctx context.Context) (float64, error) {
+	var hours float64
+	err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(
+			EXTRACT(EPOCH FROM (NOW() - MIN(first_failed_at))) / 3600,
+			0
+		)
+		FROM issues WHERE status = 'open'
+	`).Scan(&hours)
+	return hours, err
+}

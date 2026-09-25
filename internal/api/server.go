@@ -77,6 +77,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/issues/{id}/replay", s.auth(s.replayIssue))
 	mux.HandleFunc("POST /api/issues/replay-bulk", s.auth(s.replayBulk))
 
+	mux.HandleFunc("GET /api/alert-rules", s.auth(s.listAlertRules))
+	mux.HandleFunc("POST /api/alert-rules", s.auth(s.createAlertRule))
+	mux.HandleFunc("PATCH /api/alert-rules/{id}", s.auth(s.patchAlertRule))
+	mux.HandleFunc("DELETE /api/alert-rules/{id}", s.auth(s.deleteAlertRule))
+	mux.HandleFunc("GET /api/alert-notifications", s.auth(s.listAlertNotifications))
+
 	mux.HandleFunc("GET /api/sink", s.auth(s.getSink))
 	mux.HandleFunc("POST /api/sink/break", s.auth(s.sinkBreak))
 	mux.HandleFunc("POST /api/sink/fix", s.auth(s.sinkFix))

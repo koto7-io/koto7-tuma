@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// SMTPConfig holds outbound email settings loaded from environment variables.
+// Credentials are never logged — only Host, Port, and From are safe to print.
+type SMTPConfig struct {
+	Host     string // SMTP_HOST
+	Port     int    // SMTP_PORT (default 587)
+	Username string // SMTP_USERNAME
+	Password string // SMTP_PASSWORD — never log this field
+	From     string // SMTP_FROM
+}
+
 type Config struct {
 	DatabaseURL        string
 	TemporalHost       string
@@ -20,11 +30,13 @@ type Config struct {
 	SessionTTL         time.Duration
 	MaxBodyBytes       int64
 	PerConnConcurrency int
-	LogLevel           string
-	DemoMode           bool
+	LogLevel               string
+	DemoMode               bool
 	PlaygroundInternalBase string
 	PlaygroundSessionTTL   time.Duration
 	PlaygroundMaxSessions  int
+	AlertEvalInterval      time.Duration
+	SMTP                   SMTPConfig
 }
 
 func Load() (*Config, error) {
@@ -49,6 +61,8 @@ func Load() (*Config, error) {
 	demoMode := demoModeEnabled(publicBaseURL)
 	pgHours, _ := strconv.Atoi(env("TUMA_PLAYGROUND_SESSION_TTL_HOURS", "2"))
 	pgMax, _ := strconv.Atoi(env("TUMA_PLAYGROUND_MAX_SESSIONS", "500"))
+	alertEvalS, _ := strconv.Atoi(env("TUMA_ALERT_EVAL_INTERVAL_SECONDS", "60"))
+	smtpPort, _ := strconv.Atoi(env("SMTP_PORT", "587"))
 	pgInternal := env("TUMA_PLAYGROUND_INTERNAL_BASE", "")
 	if pgInternal == "" {
 		if demoMode {
@@ -75,6 +89,14 @@ func Load() (*Config, error) {
 		PlaygroundInternalBase: pgInternal,
 		PlaygroundSessionTTL:   time.Duration(pgHours) * time.Hour,
 		PlaygroundMaxSessions:  pgMax,
+		AlertEvalInterval: time.Duration(alertEvalS) * time.Second,
+		SMTP: SMTPConfig{
+			Host:     env("SMTP_HOST", ""),
+			Port:     smtpPort,
+			Username: env("SMTP_USERNAME", ""),
+			Password: os.Getenv("SMTP_PASSWORD"), // deliberately not using env() to avoid accidental logging
+			From:     env("SMTP_FROM", "tuma@localhost"),
+		},
 	}, nil
 }
 
