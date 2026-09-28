@@ -18,6 +18,12 @@ const (
 	// TypeOpenIssuesExceeded fires when open issues exceed the configured limit.
 	TypeOpenIssuesExceeded Type = "OPEN_ISSUES_EXCEEDED"
 
+	// TypeDeliverySuccessDropped fires when the delivery success rate drops below the configured threshold.
+	TypeDeliverySuccessDropped Type = "DELIVERY_SUCCESS_DROPPED"
+
+	// TypeIssueUnresolved fires when an open issue stays unresolved longer than the configured threshold.
+	TypeIssueUnresolved Type = "ISSUE_UNRESOLVED"
+
 	// TypeTestNotification is used to verify that the notification pipeline is working.
 	TypeTestNotification Type = "TEST_NOTIFICATION"
 )
@@ -53,6 +59,28 @@ Current open issues : {{current_value}}
 Threshold           : {{limit}}
 
 Please review your open issues in the Tuma console.
+`),
+	},
+	TypeDeliverySuccessDropped: {
+		Subject: "Alert: Delivery Success Dropped Below Threshold — {{resource_name}}",
+		Body: strings.TrimSpace(`
+Your delivery success rate has dropped below the configured threshold.
+
+Current success rate : {{current_value}}%
+Threshold            : {{limit}}%
+
+Please review recent delivery failures in the Tuma console.
+`),
+	},
+	TypeIssueUnresolved: {
+		Subject: "Alert: Issue Unresolved Exceeded Threshold — {{resource_name}}",
+		Body: strings.TrimSpace(`
+An open issue has remained unresolved longer than the configured threshold.
+
+Oldest issue age : {{current_value}}h
+Threshold        : {{limit}}h
+
+Please review and resolve open issues in the Tuma console.
 `),
 	},
 	TypeTestNotification: {

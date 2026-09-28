@@ -85,6 +85,8 @@ function Stepper({
   onChange: (v: number) => void;
 }) {
   const step = 1;
+  // Percent and hours rules are meaningless at 0; counts (open issues) keep 0.
+  const min = unit === "COUNT" ? 0 : 1;
   const max = unit === "PERCENT" ? 100 : 9999;
 
   return (
@@ -92,7 +94,7 @@ function Stepper({
       <button
         type="button"
         className="ar-stepper__btn"
-        onClick={() => onChange(Math.max(0, value - step))}
+        onClick={() => onChange(Math.max(min, value - step))}
         aria-label="Decrease"
       >
         −

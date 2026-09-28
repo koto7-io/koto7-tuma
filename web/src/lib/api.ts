@@ -129,7 +129,6 @@ export const api = {
     request<{ url: string; fail: boolean; events: SinkEvent[] }>("/api/sink"),
   sinkBreak: () => request<{ fail: boolean }>("/api/sink/break", { method: "POST" }),
   sinkFix: () => request<{ fail: boolean }>("/api/sink/fix", { method: "POST" }),
-  getConfig: () => request<{ demo_mode: boolean }>("/api/config"),
   listAlertRules: () =>
     request<{ alert_rules: AlertRule[]; active_count: number; total_count: number }>("/api/alert-rules"),
   createAlertRule: (body: {
