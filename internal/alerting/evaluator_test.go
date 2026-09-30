@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 
@@ -66,6 +67,24 @@ func (m *mockStore) SetAlertRuleFiring(ctx context.Context, id uuid.UUID, thresh
 	return storage.ErrAlertRuleNotFound
 }
 
+func (m *mockStore) SetAlertRuleDeliveryError(ctx context.Context, id uuid.UUID, message *string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.rules {
+		if m.rules[i].ID != id {
+			continue
+		}
+		if message == nil {
+			m.rules[i].DeliveryError = nil
+			return nil
+		}
+		v := *message
+		m.rules[i].DeliveryError = &v
+		return nil
+	}
+	return storage.ErrAlertRuleNotFound
+}
+
 func (m *mockStore) firing(id uuid.UUID) *float64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -75,6 +94,17 @@ func (m *mockStore) firing(id uuid.UUID) *float64 {
 		}
 	}
 	return nil
+}
+
+func (m *mockStore) deliveryError(id uuid.UUID) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.rules {
+		if m.rules[i].ID == id && m.rules[i].DeliveryError != nil {
+			return *m.rules[i].DeliveryError
+		}
+	}
+	return ""
 }
 
 type mockNotifier struct {
@@ -198,6 +228,9 @@ func TestEvaluator_SendFailure_DoesNotLatch(t *testing.T) {
 	if store.firing(ruleID) != nil {
 		t.Fatal("latched a failed send")
 	}
+	if !strings.Contains(store.deliveryError(ruleID), "Email failed") {
+		t.Fatalf("delivery error = %q", store.deliveryError(ruleID))
+	}
 
 	notifier.mu.Lock()
 	notifier.err = nil
@@ -210,6 +243,9 @@ func TestEvaluator_SendFailure_DoesNotLatch(t *testing.T) {
 	}
 	if store.firing(ruleID) == nil {
 		t.Fatal("expected latch after the retry succeeded")
+	}
+	if store.deliveryError(ruleID) != "" {
+		t.Fatalf("delivery error was not cleared: %q", store.deliveryError(ruleID))
 	}
 }
 
@@ -356,13 +392,16 @@ func TestEvaluator_SlackDM_FailureDoesNotLatch(t *testing.T) {
 		rules:   []storage.AlertRule{rule},
 		metrics: &storage.PlatformMetrics{OpenIssues: 4},
 	}
-	slack := &mockSlack{err: errors.New("channel_not_found")}
+	slack := &mockSlack{err: errors.New("slack: messages_tab_disabled")}
 	ev := New(store, nil, slack, 0, testLogger())
 	if err := ev.evaluateOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if store.firing(ruleID) != nil || len(store.notifications) != 0 {
 		t.Fatal("failed slack DM was latched")
+	}
+	if !strings.Contains(store.deliveryError(ruleID), "blocked this DM") {
+		t.Fatalf("delivery error = %q", store.deliveryError(ruleID))
 	}
 }
 

@@ -50,6 +50,9 @@ export function Layout({
             Issues
             {issueCount > 0 && <span className="tuma-sidebar__badge">{issueCount}</span>}
           </NavLink>
+          <NavLink to="/admin" className={({ isActive }) => navClass(isActive)}>
+            Admin
+          </NavLink>
         </nav>
 
         <div className="tuma-sidebar__footer">

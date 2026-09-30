@@ -6,6 +6,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { ConnectionDetailPage } from "./pages/ConnectionDetailPage";
 import { IssuesPage } from "./pages/IssuesPage";
+import { AdminPage } from "./pages/AdminPage";
 import { MetricsPage } from "./pages/MetricsPage";
 import { PlaygroundPage } from "./pages/PlaygroundPage";
 import { api } from "./lib/api";
@@ -56,6 +57,7 @@ function ConsoleApp() {
         <Route path="/connections/:id" element={<ConnectionDetailPage />} />
         <Route path="/metrics" element={<MetricsPage />} />
         <Route path="/issues" element={<IssuesPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Routes>
     </Layout>
   );

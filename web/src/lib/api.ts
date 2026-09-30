@@ -1,5 +1,32 @@
 export type { Connection, ConnectionStats, PlatformMetrics, HourlyCount } from "./types";
 
+export type NotificationSettings = {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_from: string;
+  smtp_password_saved: boolean;
+  smtp_password_in_env: boolean;
+  env_smtp_host: string;
+  env_smtp_port: number;
+  env_smtp_from: string;
+  slack_token_saved: boolean;
+  slack_token_in_env: boolean;
+  email_enabled: boolean;
+  slack_enabled: boolean;
+};
+
+export type NotificationSettingsUpdate = {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_from: string;
+  smtp_password?: string;
+  clear_smtp_password?: boolean;
+  slack_bot_token?: string;
+  clear_slack_token?: boolean;
+};
+
 export type AlertRule = {
   id: string;
   name: string;
@@ -11,6 +38,7 @@ export type AlertRule = {
   notification_dest: string;
   subject_template?: string | null;
   body_template?: string | null;
+  delivery_error?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -124,12 +152,18 @@ export const api = {
       body: JSON.stringify({ ids }),
     }),
   getMetrics: () => request<PlatformMetrics>("/api/metrics"),
-  getConfig: () => request<{ demo_mode: boolean; sink_url: string }>("/api/config"),
+  getConfig: () =>
+    request<{ demo_mode: boolean; sink_url: string; email_enabled: boolean; slack_enabled: boolean }>("/api/config"),
+  getNotificationSettings: () => request<NotificationSettings>("/api/admin/notification-settings"),
+  saveNotificationSettings: (body: NotificationSettingsUpdate) =>
+    request<NotificationSettings>("/api/admin/notification-settings", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   getSink: () =>
     request<{ url: string; fail: boolean; events: SinkEvent[] }>("/api/sink"),
   sinkBreak: () => request<{ fail: boolean }>("/api/sink/break", { method: "POST" }),
   sinkFix: () => request<{ fail: boolean }>("/api/sink/fix", { method: "POST" }),
-  getConfig: () => request<{ demo_mode: boolean }>("/api/config"),
   listAlertRules: () =>
     request<{ alert_rules: AlertRule[]; active_count: number; total_count: number }>("/api/alert-rules"),
   createAlertRule: (body: {

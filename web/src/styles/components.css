@@ -546,6 +546,12 @@
   color: var(--muted);
 }
 
+.ar-row__error {
+  font-size: var(--text-xs);
+  color: var(--red);
+  line-height: 1.35;
+}
+
 /* Toggle */
 .ar-toggle {
   flex-shrink: 0;

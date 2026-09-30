@@ -479,6 +479,7 @@ type AlertRule struct {
 	SubjectTemplate  *string   `json:"subject_template"`
 	BodyTemplate     *string   `json:"body_template"`
 	FiringThreshold  *float64  `json:"-"`
+	DeliveryError    *string   `json:"delivery_error,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -498,7 +499,7 @@ func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, rule_type, threshold, unit, active,
 		       notification_type, notification_dest, subject_template, body_template,
-		       firing_threshold, created_at, updated_at
+		       firing_threshold, delivery_error, created_at, updated_at
 		FROM alert_rules ORDER BY created_at ASC
 	`)
 	if err != nil {
@@ -510,7 +511,7 @@ func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 		var r AlertRule
 		if err := rows.Scan(&r.ID, &r.Name, &r.RuleType, &r.Threshold, &r.Unit, &r.Active,
 			&r.NotificationType, &r.NotificationDest, &r.SubjectTemplate, &r.BodyTemplate,
-			&r.FiringThreshold, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			&r.FiringThreshold, &r.DeliveryError, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -558,11 +559,11 @@ func (s *Store) GetAlertRule(ctx context.Context, id uuid.UUID) (*AlertRule, err
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, rule_type, threshold, unit, active,
 		       notification_type, notification_dest, subject_template, body_template,
-		       firing_threshold, created_at, updated_at
+		       firing_threshold, delivery_error, created_at, updated_at
 		FROM alert_rules WHERE id=$1
 	`, id).Scan(&r.ID, &r.Name, &r.RuleType, &r.Threshold, &r.Unit, &r.Active,
 		&r.NotificationType, &r.NotificationDest, &r.SubjectTemplate, &r.BodyTemplate,
-		&r.FiringThreshold, &r.CreatedAt, &r.UpdatedAt)
+		&r.FiringThreshold, &r.DeliveryError, &r.CreatedAt, &r.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -620,6 +621,18 @@ func (s *Store) SetAlertRuleFiring(ctx context.Context, id uuid.UUID, threshold 
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE alert_rules SET firing_threshold=$2 WHERE id=$1
 	`, id, threshold)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrAlertRuleNotFound
+	}
+	return nil
+}
+
+// SetAlertRuleDeliveryError stores the last send failure, or clears it when message is nil.
+func (s *Store) SetAlertRuleDeliveryError(ctx context.Context, id uuid.UUID, message *string) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE alert_rules SET delivery_error=$2 WHERE id=$1`, id, message)
 	if err != nil {
 		return err
 	}

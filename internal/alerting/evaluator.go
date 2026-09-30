@@ -29,6 +29,8 @@ type Store interface {
 	RecordAlertNotification(ctx context.Context, n *storage.AlertNotification) error
 	// SetAlertRuleFiring persists the delivered breach. A nil threshold clears it.
 	SetAlertRuleFiring(ctx context.Context, id uuid.UUID, threshold *float64) error
+	// SetAlertRuleDeliveryError records the last send failure. A nil message clears it.
+	SetAlertRuleDeliveryError(ctx context.Context, id uuid.UUID, message *string) error
 }
 
 // Notifier is the interface the Evaluator uses to dispatch email notifications.
@@ -148,8 +150,10 @@ func (e *Evaluator) evaluateOnce(ctx context.Context) error {
 				"notification_type", rule.NotificationType,
 				"error", err,
 			)
+			e.noteDeliveryError(ctx, rule, err)
 			continue
 		}
+		e.clearDeliveryError(ctx, rule)
 
 		n := &storage.AlertNotification{
 			AlertRuleID:  rule.ID,
@@ -171,6 +175,25 @@ func (e *Evaluator) evaluateOnce(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (e *Evaluator) noteDeliveryError(ctx context.Context, rule storage.AlertRule, sendErr error) {
+	msg := deliveryErrorText(rule, sendErr)
+	if rule.DeliveryError != nil && *rule.DeliveryError == msg {
+		return
+	}
+	if err := e.store.SetAlertRuleDeliveryError(ctx, rule.ID, &msg); err != nil {
+		e.logger.Warn("failed to record delivery error", "rule_id", rule.ID, "error", err)
+	}
+}
+
+func (e *Evaluator) clearDeliveryError(ctx context.Context, rule storage.AlertRule) {
+	if rule.DeliveryError == nil {
+		return
+	}
+	if err := e.store.SetAlertRuleDeliveryError(ctx, rule.ID, nil); err != nil {
+		e.logger.Warn("failed to clear delivery error", "rule_id", rule.ID, "error", err)
+	}
 }
 
 func (e *Evaluator) clearFiring(ctx context.Context, rule storage.AlertRule) {

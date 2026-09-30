@@ -111,6 +111,19 @@ func (s *Server) createAlertRule(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
+	eff, err := s.notificationSettings(r)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if req.NotificationType == "email" && !eff.View.EmailEnabled {
+		http.Error(w, "set email in Admin, or SMTP_HOST on the server", http.StatusBadRequest)
+		return
+	}
+	if req.NotificationType == "slack_dm" && !eff.View.SlackEnabled {
+		http.Error(w, "set the Slack bot token in Admin, or SLACK_BOT_TOKEN on the server", http.StatusBadRequest)
+		return
+	}
 
 	rule := &storage.AlertRule{
 		Name:             req.Name,

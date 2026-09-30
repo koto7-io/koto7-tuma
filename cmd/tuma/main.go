@@ -28,6 +28,7 @@ import (
 	"github.com/koto7/tuma/internal/crypto"
 	"github.com/koto7/tuma/internal/metrics"
 	"github.com/koto7/tuma/internal/notification"
+	"github.com/koto7/tuma/internal/notifysettings"
 	"github.com/koto7/tuma/internal/storage"
 	"github.com/koto7/tuma/internal/workflow"
 )
@@ -175,18 +176,25 @@ func runWorker(cfg *config.Config, store *storage.Store, enc *crypto.Encryptor, 
 	w.RegisterActivity(acts.RecordDelivered)
 	w.RegisterActivity(acts.RecordIssue)
 
-	// Build the notification chain: SMTP sender → service.
-	// When SMTP_HOST is empty the sender is still constructed but will fail
-	// gracefully at send-time (best-effort, errors are logged not fatal).
-	smtpSender := notification.NewSMTPSender(notification.SMTPConfig{
-		Host:     cfg.SMTP.Host,
-		Port:     cfg.SMTP.Port,
-		Username: cfg.SMTP.Username,
-		Password: cfg.SMTP.Password,
-		From:     cfg.SMTP.From,
+	// Admin settings override the environment and are read on each send.
+	resolve := func(ctx context.Context) (notifysettings.Effective, error) {
+		return notifysettings.Load(ctx, store, enc, cfg)
+	}
+	smtpSender := notification.NewResolvingSender(func(ctx context.Context) (notification.SMTPConfig, error) {
+		eff, err := resolve(ctx)
+		if err != nil {
+			return notification.SMTPConfig{}, err
+		}
+		return eff.SMTP, nil
 	})
 	notifSvc := notification.NewService(smtpSender, logger)
-	slackDM := notification.NewSlackClient(cfg.SlackBotToken)
+	slackDM := notification.NewResolvingSlack(func(ctx context.Context) (string, error) {
+		eff, err := resolve(ctx)
+		if err != nil {
+			return "", err
+		}
+		return eff.SlackToken, nil
+	})
 
 	// Launch alert evaluator alongside the Temporal worker.
 	evalCtx, cancelEval := context.WithCancel(context.Background())
