@@ -48,9 +48,14 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
 	slog.SetDefault(logger)
 
-	if err := runMigrations(cfg.DatabaseURL); err != nil {
-		logger.Error("migrations failed", "error", err)
-		os.Exit(1)
+	// API and worker both migrating races golang-migrate into a dirty
+	// schema_migrations row and crash-loops the stack.
+	mode := os.Args[2]
+	if mode == "api" {
+		if err := runMigrations(cfg.DatabaseURL); err != nil {
+			logger.Error("migrations failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
@@ -72,11 +77,13 @@ func main() {
 	}
 	store := storage.New(pool, payloadEnc)
 
-	if n, err := store.BackfillPayloadEncryption(context.Background()); err != nil {
-		logger.Error("payload encryption backfill failed", "error", err)
-		os.Exit(1)
-	} else if n > 0 {
-		logger.Info("encrypted legacy event payloads", "count", n)
+	if mode == "api" {
+		if n, err := store.BackfillPayloadEncryption(context.Background()); err != nil {
+			logger.Error("payload encryption backfill failed", "error", err)
+			os.Exit(1)
+		} else if n > 0 {
+			logger.Info("encrypted legacy event payloads", "count", n)
+		}
 	}
 
 	if err := bootstrapAdmin(context.Background(), store, logger); err != nil {
@@ -98,7 +105,7 @@ func main() {
 	}
 	defer temporalClient.Close()
 
-	switch os.Args[2] {
+	switch mode {
 	case "api":
 		runAPI(cfg, store, enc, temporalClient, logger)
 	case "worker":

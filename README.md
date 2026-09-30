@@ -1,8 +1,14 @@
-# Tuma — team guide
+# Tuma
 
 **Website:** https://tuma.koto7.io · **License:** MIT
 
-Self-hosted webhook reliability layer. Providers POST to Tuma; Tuma stores events durably, delivers to your app with retries, and surfaces failures for replay.
+Tuma exists because koto7 was losing logistics webhooks. It is the same thing, self-hosted, MIT.
+
+Providers POST to Tuma. The event is on disk before Tuma acks. If the process dies mid-request, the provider already got a durable write, not a lost body. Tuma then delivers to your app with retries and keeps failures in Issues for replay.
+
+Delivery is **at-least-once**, not exactly-once. Retries and replays can repeat a POST. Dedupe on `X-Tuma-Delivery-Id` or your own business key.
+
+Tuma runs retries on **Temporal**. That is one more component: upgrades, task queues, workflow history. The tradeoff is that crash recovery is Temporal's, not a queue we invented. See [TEMPORAL.md](TEMPORAL.md).
 
 **Console:** Connections · Metrics · Issues · Admin  
 **Stack:** Go API + Temporal worker + Postgres + React UI (Docker Compose)
@@ -264,6 +270,7 @@ Tuma guarantees **at-least-once**, not exactly-once. Retries and replays can cau
 | `DATABASE_URL` | compose internal | Postgres |
 | `TEMPORAL_HOST` | `temporal:7233` | Temporal frontend |
 | `TUMA_ENCRYPTION_KEY` | *(required)* | 32-byte key; encrypts signing secrets at rest |
+| `TUMA_PAYLOAD_KEY` | encryption key | Separate 32-byte key for webhook bodies and headers. Unset uses `TUMA_ENCRYPTION_KEY`. |
 | `TUMA_PUBLIC_BASE_URL` | `http://localhost` | Shown in webhook URLs; `https://` enables Secure cookies |
 | `TUMA_ADMIN_EMAIL` | `admin@localhost` | Bootstrap admin (first boot only) |
 | `TUMA_ADMIN_PASSWORD` | *(generated)* | Set before first boot to pin password |
@@ -284,7 +291,9 @@ See `deploy/.env.example` for production template.
 
 ## Backup & restore
 
-Postgres holds all events, deliveries, issues, and encrypted secrets. Temporal state is also in Postgres in the default stack.
+Postgres holds events, deliveries, issues, and encrypted payloads, headers, and signing secrets. The API deletes events older than each connection's `retention_days` every hour.
+
+The same Postgres also holds Temporal's schema. Tuma migrates with `golang-migrate` on API startup. Temporal migrates when you bump its image. One does not run the other. Details and the upgrade sequence are in [TEMPORAL.md](TEMPORAL.md).
 
 ```bash
 # Logical backup
@@ -332,8 +341,8 @@ cd web && npm install && npm run dev  # terminal 3
 
 ## Architecture & scope
 
-- **v1 included:** connections, retries, issues/DLQ + replay, alert rules (email and Slack DM), session auth, in-app metrics, Prometheus/Grafana, dark mode
-- **Not in v1:** multi-tenancy, billing, RBAC, transformations
+- **v1 included:** connections, retries, issues/DLQ + replay, alert rules (email and Slack DM), payload encryption, session auth, in-app metrics, Prometheus/Grafana, dark mode
+- **Not in v1:** multi-tenancy, billing, RBAC, transformations, MCP
 
 ---
 
