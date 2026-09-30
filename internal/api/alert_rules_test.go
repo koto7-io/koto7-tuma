@@ -9,6 +9,12 @@ func TestValidateAlertRule(t *testing.T) {
 	if msg := validateAlertRule("OPEN_ISSUES", "COUNT", 5, "slack", "https://hooks.slack.com/services/T/B/secret"); msg == "" {
 		t.Fatal("slack webhook must be rejected")
 	}
+	if msg := validateAlertRule("OPEN_ISSUES", "COUNT", 5, "slack_dm", "U012ABCDEF"); msg != "" {
+		t.Fatal(msg)
+	}
+	if msg := validateAlertRule("OPEN_ISSUES", "COUNT", 5, "slack_dm", "https://hooks.slack.com/services/T/B/secret"); msg == "" {
+		t.Fatal("webhook URL must not be accepted as a Slack DM destination")
+	}
 	if msg := validateAlertRule("OPEN_ISSUES", "COUNT", 5, "email", "not-an-email"); msg == "" {
 		t.Fatal("expected invalid email")
 	}

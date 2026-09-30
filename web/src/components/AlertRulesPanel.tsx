@@ -53,6 +53,7 @@ Please review and resolve open issues in the Tuma console.`,
 };
 
 function destLabel(rule: AlertRule): string {
+  if (rule.notification_type === "slack_dm") return `Slack DM ${rule.notification_dest}`;
   return rule.notification_dest;
 }
 
@@ -114,7 +115,12 @@ function Stepper({
 
 // ─── New Rule Modal ──────────────────────────────────────────────────────────
 
-const NOTIF_TYPES = ["email"] as const;
+const NOTIF_TYPES = ["email", "slack_dm"] as const;
+
+const NOTIF_LABELS: Record<(typeof NOTIF_TYPES)[number], string> = {
+  email: "Email",
+  slack_dm: "Slack DM",
+};
 
 function NewRuleModal({
   onClose,
@@ -218,18 +224,23 @@ function NewRuleModal({
           <select
             className="tuma-input"
             value={notifType}
-            onChange={(e) => setNotifType(e.target.value as (typeof NOTIF_TYPES)[number])}
+            onChange={(e) => {
+              setNotifType(e.target.value as (typeof NOTIF_TYPES)[number]);
+              setNotifDest("");
+            }}
           >
-            {NOTIF_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {NOTIF_TYPES.map((t) => <option key={t} value={t}>{NOTIF_LABELS[t]}</option>)}
           </select>
 
-          <label className="ar-modal__label">Email address</label>
+          <label className="ar-modal__label">
+            {notifType === "email" ? "Email address" : "Slack member ID"}
+          </label>
           <input
             className="tuma-input"
-            type="email"
+            type={notifType === "email" ? "email" : "text"}
             value={notifDest}
             onChange={(e) => setNotifDest(e.target.value)}
-            placeholder="ops@company.com"
+            placeholder={notifType === "email" ? "ops@company.com" : "U012ABCDEF"}
           />
 
           {/* Template customization */}

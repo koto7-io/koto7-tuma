@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/koto7/tuma/internal/notification"
 	"github.com/koto7/tuma/internal/storage"
 )
 
@@ -18,10 +19,6 @@ var validUnitsForType = map[string]string{
 	"OPEN_ISSUES":      "COUNT",
 	"DELIVERY_SUCCESS": "PERCENT",
 	"UNRESOLVED_TIME":  "HOURS",
-}
-
-var validNotificationTypes = map[string]bool{
-	"email": true,
 }
 
 // validateAlertRule checks all fields required for creating a rule.
@@ -39,11 +36,17 @@ func validateAlertRule(ruleType, unit string, threshold float64, notifType, noti
 	if ruleType == "DELIVERY_SUCCESS" && threshold > 100 {
 		return "threshold for DELIVERY_SUCCESS must be between 0 and 100"
 	}
-	if !validNotificationTypes[notifType] {
-		return "invalid notification_type: must be email"
-	}
-	if !validEmail(notifDest) {
-		return "notification_dest must be an email address"
+	switch notifType {
+	case "email":
+		if !validEmail(notifDest) {
+			return "notification_dest must be an email address"
+		}
+	case "slack_dm":
+		if !notification.ValidSlackUserID(notifDest) {
+			return "notification_dest must be a Slack member ID"
+		}
+	default:
+		return "invalid notification_type: must be email or slack_dm"
 	}
 	return ""
 }

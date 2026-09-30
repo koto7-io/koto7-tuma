@@ -124,7 +124,7 @@ func TestEvaluator_OpenIssuesExceeded_SendsOnlyOneNotification(t *testing.T) {
 		metrics: &storage.PlatformMetrics{OpenIssues: 10},
 	}
 	notifier := &mockNotifier{}
-	ev := New(store, notifier, 0, testLogger())
+	ev := New(store, notifier, nil, 0, testLogger())
 	ctx := context.Background()
 
 	if err := ev.evaluateOnce(ctx); err != nil {
@@ -187,7 +187,7 @@ func TestEvaluator_SendFailure_DoesNotLatch(t *testing.T) {
 		metrics: &storage.PlatformMetrics{OpenIssues: 10},
 	}
 	notifier := &mockNotifier{err: errors.New("smtp down")}
-	ev := New(store, notifier, 0, testLogger())
+	ev := New(store, notifier, nil, 0, testLogger())
 
 	if err := ev.evaluateOnce(context.Background()); err != nil {
 		t.Fatal(err)
@@ -221,7 +221,7 @@ func TestEvaluator_InactiveRule_DoesNotNotify(t *testing.T) {
 		metrics: &storage.PlatformMetrics{OpenIssues: 10},
 	}
 	notifier := &mockNotifier{}
-	ev := New(store, notifier, 0, testLogger())
+	ev := New(store, notifier, nil, 0, testLogger())
 	if err := ev.evaluateOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestEvaluator_TemplateFollowsRuleType(t *testing.T) {
 		},
 	}
 	notifier := &mockNotifier{}
-	ev := New(store, notifier, 0, testLogger())
+	ev := New(store, notifier, nil, 0, testLogger())
 	if err := ev.evaluateOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestEvaluator_UnresolvedTime_UsesItsTemplate(t *testing.T) {
 		oldestAge: 9.25,
 	}
 	notifier := &mockNotifier{}
-	ev := New(store, notifier, 0, testLogger())
+	ev := New(store, notifier, nil, 0, testLogger())
 	if err := ev.evaluateOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -295,12 +295,74 @@ func TestEvaluator_DeliverySuccess_NoSamples_DoesNotFire(t *testing.T) {
 		metrics: &storage.PlatformMetrics{},
 	}
 	notifier := &mockNotifier{}
-	ev := New(store, notifier, 0, testLogger())
+	ev := New(store, notifier, nil, 0, testLogger())
 	if err := ev.evaluateOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if notifier.count() != 0 {
 		t.Fatalf("zero traffic sent %d emails", notifier.count())
+	}
+}
+
+type mockSlack struct {
+	userID string
+	text   string
+	err    error
+	calls  int
+}
+
+func (m *mockSlack) PostDM(ctx context.Context, userID, text string) error {
+	m.calls++
+	m.userID = userID
+	m.text = text
+	return m.err
+}
+
+func TestEvaluator_SlackDM_UsesRenderedTemplate(t *testing.T) {
+	subj := "Hello {{resource_name}}"
+	body := "open {{current_value}}"
+	rule := emailRule(uuid.New(), "OPEN_ISSUES", "COUNT", 1)
+	rule.NotificationType = "slack_dm"
+	rule.NotificationDest = "U012ABCDEF"
+	rule.SubjectTemplate = &subj
+	rule.BodyTemplate = &body
+	store := &mockStore{
+		rules:   []storage.AlertRule{rule},
+		metrics: &storage.PlatformMetrics{OpenIssues: 4},
+	}
+	email := &mockNotifier{}
+	slack := &mockSlack{}
+	ev := New(store, email, slack, 0, testLogger())
+	if err := ev.evaluateOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if email.count() != 0 {
+		t.Fatal("slack rule sent email")
+	}
+	if slack.calls != 1 || slack.userID != "U012ABCDEF" {
+		t.Fatalf("slack calls=%d user=%s", slack.calls, slack.userID)
+	}
+	if slack.text != "Hello rule\n\nopen 4" {
+		t.Fatalf("dm text = %q", slack.text)
+	}
+}
+
+func TestEvaluator_SlackDM_FailureDoesNotLatch(t *testing.T) {
+	ruleID := uuid.New()
+	rule := emailRule(ruleID, "OPEN_ISSUES", "COUNT", 1)
+	rule.NotificationType = "slack_dm"
+	rule.NotificationDest = "U012ABCDEF"
+	store := &mockStore{
+		rules:   []storage.AlertRule{rule},
+		metrics: &storage.PlatformMetrics{OpenIssues: 4},
+	}
+	slack := &mockSlack{err: errors.New("channel_not_found")}
+	ev := New(store, nil, slack, 0, testLogger())
+	if err := ev.evaluateOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.firing(ruleID) != nil || len(store.notifications) != 0 {
+		t.Fatal("failed slack DM was latched")
 	}
 }
 
@@ -310,7 +372,7 @@ func TestEvaluator_NilNotifier_DoesNotLatch(t *testing.T) {
 		rules:   []storage.AlertRule{emailRule(ruleID, "OPEN_ISSUES", "COUNT", 1)},
 		metrics: &storage.PlatformMetrics{OpenIssues: 3},
 	}
-	ev := New(store, nil, 0, testLogger())
+	ev := New(store, nil, nil, 0, testLogger())
 	if err := ev.evaluateOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}

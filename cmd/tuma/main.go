@@ -186,11 +186,12 @@ func runWorker(cfg *config.Config, store *storage.Store, enc *crypto.Encryptor, 
 		From:     cfg.SMTP.From,
 	})
 	notifSvc := notification.NewService(smtpSender, logger)
+	slackDM := notification.NewSlackClient(cfg.SlackBotToken)
 
 	// Launch alert evaluator alongside the Temporal worker.
 	evalCtx, cancelEval := context.WithCancel(context.Background())
 	defer cancelEval()
-	go alerting.New(store, notifSvc, cfg.AlertEvalInterval, logger).Run(evalCtx)
+	go alerting.New(store, notifSvc, slackDM, cfg.AlertEvalInterval, logger).Run(evalCtx)
 
 	logger.Info("worker starting", "task_queue", workflow.TaskQueue)
 	if err := w.Run(worker.InterruptCh()); err != nil {

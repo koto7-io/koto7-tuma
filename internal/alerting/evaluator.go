@@ -37,24 +37,32 @@ type Notifier interface {
 	Send(ctx context.Context, req notification.Request) error
 }
 
+// SlackDM posts an already-rendered message to a Slack member.
+// notification.SlackClient satisfies this interface.
+type SlackDM interface {
+	PostDM(ctx context.Context, userID, text string) error
+}
+
 // Evaluator runs a ticker loop that checks every active alert rule and sends
-// email when the rule's condition is breached.
-// A rule is marked firing only after Send returns nil, and only once per
+// email or a Slack DM when the rule's condition is breached.
+// A rule is marked firing only after delivery returns nil, and only once per
 // breach, until the metric recovers. A failed send is retried on the next tick.
 type Evaluator struct {
 	store    Store
 	notifier Notifier
+	slack    SlackDM
 	interval time.Duration
 	logger   *slog.Logger
 }
 
 // New creates an Evaluator with the given store, polling interval, and logger.
-// notifier handles email dispatch. A nil notifier makes email rules fail
-// (and retry) instead of being treated as delivered.
-func New(store Store, notifier Notifier, interval time.Duration, logger *slog.Logger) *Evaluator {
+// notifier handles email. slack handles Slack DMs. A nil sender makes that
+// channel fail (and retry) instead of being treated as delivered.
+func New(store Store, notifier Notifier, slack SlackDM, interval time.Duration, logger *slog.Logger) *Evaluator {
 	return &Evaluator{
 		store:    store,
 		notifier: notifier,
+		slack:    slack,
 		interval: interval,
 		logger:   logger,
 	}
@@ -219,17 +227,28 @@ func sameThreshold(a, b float64) bool {
 }
 
 func (e *Evaluator) sendNotification(ctx context.Context, rule storage.AlertRule, current float64) error {
-	if rule.NotificationType != "email" {
-		return fmt.Errorf("unknown notification_type: %s", rule.NotificationType)
-	}
-	if e.notifier == nil {
-		return fmt.Errorf("email notifier is not configured")
-	}
 	req, err := alertRequest(rule, current)
 	if err != nil {
 		return err
 	}
-	return e.notifier.Send(ctx, req)
+	switch rule.NotificationType {
+	case "email":
+		if e.notifier == nil {
+			return fmt.Errorf("email notifier is not configured")
+		}
+		return e.notifier.Send(ctx, req)
+	case "slack_dm":
+		if e.slack == nil {
+			return fmt.Errorf("slack is not configured")
+		}
+		subject, body, err := notification.RenderRequest(req)
+		if err != nil {
+			return err
+		}
+		return e.slack.PostDM(ctx, rule.NotificationDest, notification.DMText(subject, body))
+	default:
+		return fmt.Errorf("unknown notification_type: %s", rule.NotificationType)
+	}
 }
 
 func alertRequest(rule storage.AlertRule, current float64) (notification.Request, error) {
