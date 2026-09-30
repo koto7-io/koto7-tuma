@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -227,14 +228,14 @@ func (e *Evaluator) sendNotification(ctx context.Context, rule storage.AlertRule
 			customBody = *rule.BodyTemplate
 		}
 		return e.notifier.Send(ctx, notification.Request{
-			Type:          notification.TypeOpenIssuesExceeded,
+			Type:          notificationTypeFor(rule.RuleType),
 			Recipient:     rule.NotificationDest,
 			CustomSubject: customSubj,
 			CustomBody:    customBody,
 			Vars: map[string]string{
 				"resource_name": rule.Name,
-				"limit":         strconv.FormatFloat(rule.Threshold, 'f', -1, 64),
-				"current_value": strconv.FormatFloat(current, 'f', -1, 64),
+				"limit":         formatValue(rule.Unit, rule.Threshold),
+				"current_value": formatValue(rule.Unit, current),
 			},
 		})
 	default:
@@ -242,25 +243,47 @@ func (e *Evaluator) sendNotification(ctx context.Context, rule storage.AlertRule
 	}
 }
 
+// notificationTypeFor maps an alert rule type to its default email template.
+func notificationTypeFor(ruleType string) notification.Type {
+	switch ruleType {
+	case "DELIVERY_SUCCESS":
+		return notification.TypeDeliverySuccessDropped
+	case "UNRESOLVED_TIME":
+		return notification.TypeIssueUnresolved
+	default:
+		return notification.TypeOpenIssuesExceeded
+	}
+}
+
+// formatValue renders a metric for humans: whole numbers for counts,
+// one decimal place for percentages and hours (trailing ".0" dropped).
+func formatValue(unit string, v float64) string {
+	if unit == "COUNT" {
+		return strconv.FormatFloat(math.Round(v), 'f', 0, 64)
+	}
+	return strconv.FormatFloat(math.Round(v*10)/10, 'f', -1, 64)
+}
+
 func formatMessage(rule storage.AlertRule, current float64) string {
+	limit := formatValue(rule.Unit, rule.Threshold)
+	value := formatValue(rule.Unit, current)
 	if rule.BodyTemplate != nil && *rule.BodyTemplate != "" {
 		msg := *rule.BodyTemplate
 		msg = strings.ReplaceAll(msg, "{{resource_name}}", rule.Name)
-		msg = strings.ReplaceAll(msg, "{{limit}}", strconv.FormatFloat(rule.Threshold, 'f', -1, 64))
-		msg = strings.ReplaceAll(msg, "{{current_value}}", strconv.FormatFloat(current, 'f', -1, 64))
+		msg = strings.ReplaceAll(msg, "{{limit}}", limit)
+		msg = strings.ReplaceAll(msg, "{{current_value}}", value)
 		return msg
 	}
-	if rule.RuleType == "OPEN_ISSUES" {
-		return fmt.Sprintf("Your open issues have exceeded the configured limit. Current open issues: %.0f, Threshold: %.0f", current, rule.Threshold)
+	switch rule.RuleType {
+	case "OPEN_ISSUES":
+		return fmt.Sprintf("Your open issues have exceeded the configured limit. Current open issues: %s, Threshold: %s", value, limit)
+	case "DELIVERY_SUCCESS":
+		return fmt.Sprintf("Your delivery success rate has dropped below the configured threshold. Current success rate: %s%%, Threshold: %s%%", value, limit)
+	case "UNRESOLVED_TIME":
+		return fmt.Sprintf("An open issue has remained unresolved longer than the configured threshold. Oldest issue age: %sh, Threshold: %sh", value, limit)
+	default:
+		return fmt.Sprintf("[TUMA ALERT] %s — %s exceeded threshold (current: %s, limit: %s)", rule.Name, rule.RuleType, value, limit)
 	}
-	suffix := map[string]string{"COUNT": "", "PERCENT": "%", "HOURS": "h"}[rule.Unit]
-	direction := "exceeded"
-	if rule.RuleType == "DELIVERY_SUCCESS" {
-		direction = "dropped below"
-	}
-	return fmt.Sprintf("[TUMA ALERT] %s — %s %s threshold (current: %.1f%s, limit: %.0f%s)",
-		rule.Name, rule.RuleType, direction,
-		current, suffix, rule.Threshold, suffix)
 }
 
 // postSlack sends a plain-text message to a Slack incoming webhook URL.

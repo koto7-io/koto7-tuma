@@ -34,7 +34,7 @@ var discardLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 // ─── Template tests ───────────────────────────────────────────────────────────
 
 func TestRender_CorrectTemplateSelectedPerType(t *testing.T) {
-	types := []Type{TypeOpenIssuesExceeded, TypeTestNotification}
+	types := []Type{TypeOpenIssuesExceeded, TypeDeliverySuccessDropped, TypeIssueUnresolved, TypeTestNotification}
 	for _, typ := range types {
 		t.Run(string(typ), func(t *testing.T) {
 			// All templates must be resolvable with a generous vars map.
@@ -73,6 +73,46 @@ func TestRender_OpenIssuesExceeded(t *testing.T) {
 	}
 	if !contains(subj, "Open Issues") {
 		t.Errorf("expected subject to contain 'Open Issues', got: %s", subj)
+	}
+}
+
+func TestRender_DeliverySuccessDropped(t *testing.T) {
+	vars := map[string]string{
+		"resource_name": "Delivery test",
+		"limit":         "98",
+		"current_value": "97.3",
+	}
+	subj, body, err := Render(TypeDeliverySuccessDropped, vars)
+	if err != nil {
+		t.Fatalf("Render returned unexpected error: %v", err)
+	}
+	if !contains(subj, "Delivery Success Dropped") || !contains(subj, "Delivery test") {
+		t.Errorf("expected delivery-success subject with rule name, got: %s", subj)
+	}
+	for _, want := range []string{"Your delivery success rate has dropped below the configured threshold.", ": 97.3%", ": 98%"} {
+		if !contains(body, want) {
+			t.Errorf("expected body to contain %q, got:\n%s", want, body)
+		}
+	}
+}
+
+func TestRender_IssueUnresolved(t *testing.T) {
+	vars := map[string]string{
+		"resource_name": "Unresolved test",
+		"limit":         "6",
+		"current_value": "6.5",
+	}
+	subj, body, err := Render(TypeIssueUnresolved, vars)
+	if err != nil {
+		t.Fatalf("Render returned unexpected error: %v", err)
+	}
+	if !contains(subj, "Issue Unresolved") || !contains(subj, "Unresolved test") {
+		t.Errorf("expected unresolved-issue subject with rule name, got: %s", subj)
+	}
+	for _, want := range []string{"An open issue has remained unresolved longer than the configured threshold.", ": 6.5h", ": 6h"} {
+		if !contains(body, want) {
+			t.Errorf("expected body to contain %q, got:\n%s", want, body)
+		}
 	}
 }
 
