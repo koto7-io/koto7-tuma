@@ -53,21 +53,7 @@ func (svc *Service) Send(ctx context.Context, req Request) error {
 		"recipient", req.Recipient,
 	)
 
-	var subject, body string
-	var err error
-
-	if req.CustomBody != "" {
-		subjTmpl := req.CustomSubject
-		if subjTmpl == "" {
-			if tmpl, ok := GetDefaultTemplate(req.Type); ok {
-				subjTmpl = tmpl.Subject
-			}
-		}
-		subject, body, err = RenderCustom(subjTmpl, req.CustomBody, req.Vars)
-	} else {
-		subject, body, err = Render(req.Type, req.Vars)
-	}
-
+	subject, body, err := RenderRequest(req)
 	if err != nil {
 		return fmt.Errorf("notification render: %w", err)
 	}

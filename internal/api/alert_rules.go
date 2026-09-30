@@ -2,16 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/mail"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/koto7/tuma/internal/storage"
 )
-
-// maxAlertRules is the hard cap enforced at creation time.
-const maxAlertRules = 10
 
 // validUnitsForType maps each rule type to its single permitted unit.
 var validUnitsForType = map[string]string{
@@ -21,7 +21,6 @@ var validUnitsForType = map[string]string{
 }
 
 var validNotificationTypes = map[string]bool{
-	"slack": true,
 	"email": true,
 }
 
@@ -41,12 +40,20 @@ func validateAlertRule(ruleType, unit string, threshold float64, notifType, noti
 		return "threshold for DELIVERY_SUCCESS must be between 0 and 100"
 	}
 	if !validNotificationTypes[notifType] {
-		return "invalid notification_type: must be one of slack, email"
+		return "invalid notification_type: must be email"
 	}
-	if notifDest == "" {
-		return "notification_dest is required"
+	if !validEmail(notifDest) {
+		return "notification_dest must be an email address"
 	}
 	return ""
+}
+
+func validEmail(s string) bool {
+	if s == "" || strings.ContainsAny(s, " \r\n") {
+		return false
+	}
+	addr, err := mail.ParseAddress(s)
+	return err == nil && addr.Address == s
 }
 
 // ─── List alert rules ─────────────────────────────────────────────────────────
@@ -102,16 +109,6 @@ func (s *Server) createAlertRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := s.store.CountAlertRules(r.Context())
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	if count >= maxAlertRules {
-		http.Error(w, "maximum 10 alert rules allowed", http.StatusBadRequest)
-		return
-	}
-
 	rule := &storage.AlertRule{
 		Name:             req.Name,
 		RuleType:         req.RuleType,
@@ -124,6 +121,10 @@ func (s *Server) createAlertRule(w http.ResponseWriter, r *http.Request) {
 		BodyTemplate:     req.BodyTemplate,
 	}
 	if err := s.store.CreateAlertRule(r.Context(), rule); err != nil {
+		if errors.Is(err, storage.ErrTooManyAlertRules) {
+			http.Error(w, "maximum 10 alert rules allowed", http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -160,7 +161,11 @@ func (s *Server) patchAlertRule(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, err := s.store.GetAlertRule(r.Context(), id)
-		if err != nil || existing == nil {
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if existing == nil {
 			http.NotFound(w, r)
 			return
 		}
@@ -171,8 +176,12 @@ func (s *Server) patchAlertRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rule, err := s.store.UpdateAlertRule(r.Context(), id, req.Active, req.Threshold, req.SubjectTemplate, req.BodyTemplate)
-	if err != nil || rule == nil {
+	if errors.Is(err, storage.ErrAlertRuleNotFound) {
 		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -189,6 +198,10 @@ func (s *Server) deleteAlertRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.store.DeleteAlertRule(r.Context(), id); err != nil {
+		if errors.Is(err, storage.ErrAlertRuleNotFound) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

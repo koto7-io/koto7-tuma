@@ -53,7 +53,6 @@ Please review and resolve open issues in the Tuma console.`,
 };
 
 function destLabel(rule: AlertRule): string {
-  if (rule.notification_type === "slack") return `#${rule.notification_dest.split("/").pop()} on Slack`;
   return rule.notification_dest;
 }
 
@@ -115,7 +114,7 @@ function Stepper({
 
 // ─── New Rule Modal ──────────────────────────────────────────────────────────
 
-const NOTIF_TYPES = ["slack", "email"] as const;
+const NOTIF_TYPES = ["email"] as const;
 
 function NewRuleModal({
   onClose,
@@ -224,14 +223,13 @@ function NewRuleModal({
             {NOTIF_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
 
-          <label className="ar-modal__label">
-            {notifType === "email" ? "Email address" : "Slack webhook URL"}
-          </label>
+          <label className="ar-modal__label">Email address</label>
           <input
             className="tuma-input"
+            type="email"
             value={notifDest}
             onChange={(e) => setNotifDest(e.target.value)}
-            placeholder={notifType === "email" ? "ops@company.com" : "https://hooks.slack.com/..."}
+            placeholder="ops@company.com"
           />
 
           {/* Template customization */}

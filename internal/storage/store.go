@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,18 +15,18 @@ import (
 )
 
 type Connection struct {
-	ID                   uuid.UUID
-	Name                 string
-	SourceType           string
-	InboundPath          string
-	DestinationURL       string
-	SigningSecretEnc     []byte
-	RetryAttempts        int
-	RetryFirstDelayS     int
-	RetryBackoffFactor   float64
-	RetentionDays        int
-	IsPlayground         bool
-	CreatedAt            time.Time
+	ID                 uuid.UUID
+	Name               string
+	SourceType         string
+	InboundPath        string
+	DestinationURL     string
+	SigningSecretEnc   []byte
+	RetryAttempts      int
+	RetryFirstDelayS   int
+	RetryBackoffFactor float64
+	RetentionDays      int
+	IsPlayground       bool
+	CreatedAt          time.Time
 }
 
 type Event struct {
@@ -202,7 +203,7 @@ func (s *Store) UpdateConnectionSecret(ctx context.Context, id uuid.UUID, enc []
 }
 
 type InsertEventResult struct {
-	Event   *Event
+	Event    *Event
 	Inserted bool
 }
 
@@ -458,6 +459,13 @@ func InboundURL(base, path string) string {
 
 // ─── Alert Rules ─────────────────────────────────────────────────────────────
 
+const maxAlertRules = 10
+
+var (
+	ErrAlertRuleNotFound = errors.New("alert rule not found")
+	ErrTooManyAlertRules = errors.New("maximum 10 alert rules allowed")
+)
+
 // AlertRule mirrors the alert_rules DB table.
 type AlertRule struct {
 	ID               uuid.UUID `json:"id"`
@@ -470,6 +478,7 @@ type AlertRule struct {
 	NotificationDest string    `json:"notification_dest"`
 	SubjectTemplate  *string   `json:"subject_template"`
 	BodyTemplate     *string   `json:"body_template"`
+	FiringThreshold  *float64  `json:"-"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -488,7 +497,8 @@ type AlertNotification struct {
 func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, rule_type, threshold, unit, active,
-		       notification_type, notification_dest, subject_template, body_template, created_at, updated_at
+		       notification_type, notification_dest, subject_template, body_template,
+		       firing_threshold, created_at, updated_at
 		FROM alert_rules ORDER BY created_at ASC
 	`)
 	if err != nil {
@@ -497,9 +507,10 @@ func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 	defer rows.Close()
 	var out []AlertRule
 	for rows.Next() {
-		var r AlertRule 
+		var r AlertRule
 		if err := rows.Scan(&r.ID, &r.Name, &r.RuleType, &r.Threshold, &r.Unit, &r.Active,
-			&r.NotificationType, &r.NotificationDest, &r.SubjectTemplate, &r.BodyTemplate, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			&r.NotificationType, &r.NotificationDest, &r.SubjectTemplate, &r.BodyTemplate,
+			&r.FiringThreshold, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -514,22 +525,44 @@ func (s *Store) CountAlertRules(ctx context.Context) (int, error) {
 }
 
 func (s *Store) CreateAlertRule(ctx context.Context, r *AlertRule) error {
-	return s.pool.QueryRow(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `LOCK TABLE alert_rules IN EXCLUSIVE MODE`); err != nil {
+		return err
+	}
+	var n int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM alert_rules`).Scan(&n); err != nil {
+		return err
+	}
+	if n >= maxAlertRules {
+		return ErrTooManyAlertRules
+	}
+	err = tx.QueryRow(ctx, `
 		INSERT INTO alert_rules (name, rule_type, threshold, unit, active, notification_type, notification_dest, subject_template, body_template)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		RETURNING id, created_at, updated_at
 	`, r.Name, r.RuleType, r.Threshold, r.Unit, r.Active, r.NotificationType, r.NotificationDest, r.SubjectTemplate, r.BodyTemplate,
 	).Scan(&r.ID, &r.CreatedAt, &r.UpdatedAt)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) GetAlertRule(ctx context.Context, id uuid.UUID) (*AlertRule, error) {
 	var r AlertRule
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, rule_type, threshold, unit, active,
-		       notification_type, notification_dest, subject_template, body_template, created_at, updated_at
+		       notification_type, notification_dest, subject_template, body_template,
+		       firing_threshold, created_at, updated_at
 		FROM alert_rules WHERE id=$1
 	`, id).Scan(&r.ID, &r.Name, &r.RuleType, &r.Threshold, &r.Unit, &r.Active,
-		&r.NotificationType, &r.NotificationDest, &r.SubjectTemplate, &r.BodyTemplate, &r.CreatedAt, &r.UpdatedAt)
+		&r.NotificationType, &r.NotificationDest, &r.SubjectTemplate, &r.BodyTemplate,
+		&r.FiringThreshold, &r.CreatedAt, &r.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -542,8 +575,11 @@ func (s *Store) GetAlertRule(ctx context.Context, id uuid.UUID) (*AlertRule, err
 // UpdateAlertRule applies a partial update (PATCH semantics) — only non-nil fields are changed.
 func (s *Store) UpdateAlertRule(ctx context.Context, id uuid.UUID, active *bool, threshold *float64, subjectTemplate *string, bodyTemplate *string) (*AlertRule, error) {
 	r, err := s.GetAlertRule(ctx, id)
-	if err != nil || r == nil {
-		return r, err
+	if err != nil {
+		return nil, err
+	}
+	if r == nil {
+		return nil, ErrAlertRuleNotFound
 	}
 	if active != nil {
 		r.Active = *active
@@ -569,8 +605,28 @@ func (s *Store) UpdateAlertRule(ctx context.Context, id uuid.UUID, active *bool,
 }
 
 func (s *Store) DeleteAlertRule(ctx context.Context, id uuid.UUID) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM alert_rules WHERE id=$1`, id)
-	return err
+	tag, err := s.pool.Exec(ctx, `DELETE FROM alert_rules WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrAlertRuleNotFound
+	}
+	return nil
+}
+
+// SetAlertRuleFiring records a delivered breach, or clears it when threshold is nil.
+func (s *Store) SetAlertRuleFiring(ctx context.Context, id uuid.UUID, threshold *float64) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE alert_rules SET firing_threshold=$2 WHERE id=$1
+	`, id, threshold)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrAlertRuleNotFound
+	}
+	return nil
 }
 
 // ─── Alert Notifications ──────────────────────────────────────────────────────
