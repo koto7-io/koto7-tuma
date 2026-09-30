@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, AlertRule } from "../lib/api";
 import { Button } from "./Button";
 
@@ -53,7 +54,7 @@ Please review and resolve open issues in the Tuma console.`,
 };
 
 function destLabel(rule: AlertRule): string {
-  if (rule.notification_type === "slack") return `#${rule.notification_dest.split("/").pop()} on Slack`;
+  if (rule.notification_type === "slack_dm") return `Slack DM ${rule.notification_dest}`;
   return rule.notification_dest;
 }
 
@@ -117,12 +118,21 @@ function Stepper({
 
 // ─── New Rule Modal ──────────────────────────────────────────────────────────
 
-const NOTIF_TYPES = ["slack", "email"] as const;
+const NOTIF_TYPES = ["email", "slack_dm"] as const;
+
+const NOTIF_LABELS: Record<(typeof NOTIF_TYPES)[number], string> = {
+  email: "Email",
+  slack_dm: "Slack DM",
+};
 
 function NewRuleModal({
+  emailEnabled,
+  slackEnabled,
   onClose,
   onCreated,
 }: {
+  emailEnabled: boolean;
+  slackEnabled: boolean;
   onClose: () => void;
   onCreated: (rule: AlertRule) => void;
 }) {
@@ -135,6 +145,11 @@ function NewRuleModal({
   const [bodyTemplate, setBodyTemplate] = useState(DEFAULT_TEMPLATES.OPEN_ISSUES.body);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (notifType === "email" && !emailEnabled && slackEnabled) setNotifType("slack_dm");
+    if (notifType === "slack_dm" && !slackEnabled && emailEnabled) setNotifType("email");
+  }, [emailEnabled, slackEnabled, notifType]);
 
   const unit = UNIT_FOR_TYPE[ruleType] as "COUNT" | "PERCENT" | "HOURS";
 
@@ -159,6 +174,14 @@ function NewRuleModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError("Name is required"); return; }
+    if (notifType === "email" && !emailEnabled) {
+      setError("Set SMTP_HOST on the Tuma server to enable email.");
+      return;
+    }
+    if (notifType === "slack_dm" && !slackEnabled) {
+      setError("Set SLACK_BOT_TOKEN on the Tuma server to enable Slack DMs.");
+      return;
+    }
     if (!notifDest.trim()) { setError("Destination is required"); return; }
     setSaving(true);
     setError("");
@@ -221,19 +244,41 @@ function NewRuleModal({
           <select
             className="tuma-input"
             value={notifType}
-            onChange={(e) => setNotifType(e.target.value as (typeof NOTIF_TYPES)[number])}
+            onChange={(e) => {
+              setNotifType(e.target.value as (typeof NOTIF_TYPES)[number]);
+              setNotifDest("");
+            }}
           >
-            {NOTIF_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {NOTIF_TYPES.map((t) => (
+              <option
+                key={t}
+                value={t}
+                disabled={(t === "email" && !emailEnabled) || (t === "slack_dm" && !slackEnabled)}
+              >
+                {NOTIF_LABELS[t]}
+              </option>
+            ))}
           </select>
+          {!emailEnabled && (
+            <p className="ar-template-hint">
+              Email is off. Set it in <Link to="/admin">Admin</Link>, or with <code>SMTP_HOST</code> on the server.
+            </p>
+          )}
+          {!slackEnabled && (
+            <p className="ar-template-hint">
+              Slack DMs are off. Set the bot token in <Link to="/admin">Admin</Link>, or with <code>SLACK_BOT_TOKEN</code> on the server.
+            </p>
+          )}
 
           <label className="ar-modal__label">
-            {notifType === "email" ? "Email address" : "Slack webhook URL"}
+            {notifType === "email" ? "Email address" : "Slack member ID"}
           </label>
           <input
             className="tuma-input"
+            type={notifType === "email" ? "email" : "text"}
             value={notifDest}
             onChange={(e) => setNotifDest(e.target.value)}
-            placeholder={notifType === "email" ? "ops@company.com" : "https://hooks.slack.com/..."}
+            placeholder={notifType === "email" ? "ops@company.com" : "U012ABCDEF"}
           />
 
           {/* Template customization */}
@@ -280,10 +325,14 @@ function NewRuleModal({
 
 function EditRuleModal({
   rule,
+  emailEnabled,
+  slackEnabled,
   onClose,
   onUpdated,
 }: {
   rule: AlertRule;
+  emailEnabled: boolean;
+  slackEnabled: boolean;
   onClose: () => void;
   onUpdated: (rule: AlertRule) => void;
 }) {
@@ -339,8 +388,21 @@ function EditRuleModal({
             onChange={(e) => setThreshold(Number(e.target.value))}
           />
 
-          <label className="ar-modal__label">Destination ({rule.notification_type})</label>
+          <label className="ar-modal__label">
+            Destination ({rule.notification_type === "slack_dm" ? "Slack DM" : "Email"})
+          </label>
           <input className="tuma-input" disabled value={rule.notification_dest} />
+          {rule.notification_type === "email" && !emailEnabled && (
+            <p className="ar-template-hint">
+              Email is off. Set it in <Link to="/admin">Admin</Link>. This rule will not send until you do.
+            </p>
+          )}
+          {rule.notification_type === "slack_dm" && !slackEnabled && (
+            <p className="ar-template-hint">
+              Slack DMs are off. Set the bot token in <Link to="/admin">Admin</Link>. This rule will not send until you do.
+            </p>
+          )}
+          {rule.delivery_error && <p className="ar-modal__error">{rule.delivery_error}</p>}
 
           {/* Template customization */}
           <div className="ar-template-section">
@@ -387,6 +449,9 @@ function EditRuleModal({
 export function AlertRulesPanel() {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [activeCount, setActiveCount] = useState(0);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [slackEnabled, setSlackEnabled] = useState(false);
+  const [channelsKnown, setChannelsKnown] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
   const [error, setError] = useState("");
@@ -400,7 +465,21 @@ export function AlertRulesPanel() {
       .catch(() => setError("Failed to load alert rules"));
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.getConfig()
+      .then((c) => {
+        setEmailEnabled(c.email_enabled);
+        setSlackEnabled(c.slack_enabled);
+      })
+      .catch(() => {
+        setEmailEnabled(false);
+        setSlackEnabled(false);
+      })
+      .finally(() => setChannelsKnown(true));
+    const timer = window.setInterval(load, 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function toggleRule(rule: AlertRule) {
     try {
@@ -487,6 +566,7 @@ export function AlertRulesPanel() {
             <div className="ar-row__info">
               <span className="ar-row__name">{RULE_LABELS[rule.rule_type] ?? rule.name}</span>
               <span className="ar-row__dest">{destLabel(rule)}</span>
+              {rule.delivery_error && <span className="ar-row__error">{rule.delivery_error}</span>}
             </div>
             <Stepper
               value={rule.threshold}
@@ -524,12 +604,19 @@ export function AlertRulesPanel() {
       </section>
 
       {showModal && (
-        <NewRuleModal onClose={() => setShowModal(false)} onCreated={onCreated} />
+        <NewRuleModal
+          emailEnabled={!channelsKnown || emailEnabled}
+          slackEnabled={!channelsKnown || slackEnabled}
+          onClose={() => setShowModal(false)}
+          onCreated={onCreated}
+        />
       )}
 
       {editingRule && (
         <EditRuleModal
           rule={editingRule}
+          emailEnabled={!channelsKnown || emailEnabled}
+          slackEnabled={!channelsKnown || slackEnabled}
           onClose={() => setEditingRule(null)}
           onUpdated={onUpdated}
         />

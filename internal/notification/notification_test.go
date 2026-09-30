@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -148,6 +149,47 @@ func TestRender_MissingVariable_ReturnsError(t *testing.T) {
 	}
 	if !errors.Is(err, ErrMissingVar) {
 		t.Errorf("expected ErrMissingVar, got: %v", err)
+	}
+}
+
+func TestRender_PerRuleType(t *testing.T) {
+	cases := []struct {
+		typ  Type
+		want string
+	}{
+		{TypeDeliverySuccessDropped, "delivery success rate has dropped"},
+		{TypeIssueUnresolved, "remained unresolved"},
+	}
+	vars := map[string]string{"resource_name": "Queue", "limit": "4", "current_value": "9"}
+	for _, tc := range cases {
+		_, body, err := Render(tc.typ, vars)
+		if err != nil {
+			t.Fatalf("Render(%s): %v", tc.typ, err)
+		}
+		if !contains(body, tc.want) {
+			t.Errorf("Render(%s) body = %q, want substring %q", tc.typ, body, tc.want)
+		}
+	}
+}
+
+func TestTypeForRule(t *testing.T) {
+	got, err := TypeForRule("DELIVERY_SUCCESS")
+	if err != nil || got != TypeDeliverySuccessDropped {
+		t.Fatalf("DELIVERY_SUCCESS -> %s %v", got, err)
+	}
+	if _, err := TypeForRule("NOPE"); !errors.Is(err, ErrUnknownType) {
+		t.Fatalf("unknown rule type: %v", err)
+	}
+}
+
+func TestBuildMessage_StripsHeaderInjection(t *testing.T) {
+	msg := buildMessage("from@example.com\r\nBcc: x@y.co", "ops@example.com", "Hello\r\nBcc: z@y.co", "body")
+	header, _, ok := strings.Cut(msg, "\r\n\r\n")
+	if !ok {
+		t.Fatal("missing header separator")
+	}
+	if strings.Contains(header, "\nBcc:") || strings.Contains(header, "\rBcc:") {
+		t.Fatalf("injected header survived: %q", header)
 	}
 }
 

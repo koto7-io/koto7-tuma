@@ -19,17 +19,17 @@ type SMTPConfig struct {
 }
 
 type Config struct {
-	DatabaseURL        string
-	TemporalHost       string
-	TemporalNamespace  string
-	EncryptionKey      []byte
-	PayloadKey         []byte
-	ListenAddr         string
-	PublicBaseURL      string
-	SessionCookieName  string
-	SessionTTL         time.Duration
-	MaxBodyBytes       int64
-	PerConnConcurrency int
+	DatabaseURL            string
+	TemporalHost           string
+	TemporalNamespace      string
+	EncryptionKey          []byte
+	PayloadKey             []byte
+	ListenAddr             string
+	PublicBaseURL          string
+	SessionCookieName      string
+	SessionTTL             time.Duration
+	MaxBodyBytes           int64
+	PerConnConcurrency     int
 	LogLevel               string
 	DemoMode               bool
 	PlaygroundInternalBase string
@@ -37,6 +37,7 @@ type Config struct {
 	PlaygroundMaxSessions  int
 	AlertEvalInterval      time.Duration
 	SMTP                   SMTPConfig
+	SlackBotToken          string
 }
 
 func Load() (*Config, error) {
@@ -73,23 +74,23 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		DatabaseURL:        dbURL,
-		TemporalHost:       env("TEMPORAL_HOST", "localhost:7233"),
-		TemporalNamespace:  env("TEMPORAL_NAMESPACE", "default"),
-		EncryptionKey:      []byte(key),
-		PayloadKey:         payloadKey,
-		ListenAddr:         env("TUMA_LISTEN_ADDR", ":8080"),
-		PublicBaseURL:      publicBaseURL,
-		SessionCookieName:  env("TUMA_SESSION_COOKIE", "tuma_session"),
-		SessionTTL:         time.Duration(sessionHours) * time.Hour,
-		MaxBodyBytes:       maxBody,
-		PerConnConcurrency: perConn,
-		LogLevel:           env("TUMA_LOG_LEVEL", "info"),
-		DemoMode:           demoMode,
+		DatabaseURL:            dbURL,
+		TemporalHost:           env("TEMPORAL_HOST", "localhost:7233"),
+		TemporalNamespace:      env("TEMPORAL_NAMESPACE", "default"),
+		EncryptionKey:          []byte(key),
+		PayloadKey:             payloadKey,
+		ListenAddr:             env("TUMA_LISTEN_ADDR", ":8080"),
+		PublicBaseURL:          publicBaseURL,
+		SessionCookieName:      env("TUMA_SESSION_COOKIE", "tuma_session"),
+		SessionTTL:             time.Duration(sessionHours) * time.Hour,
+		MaxBodyBytes:           maxBody,
+		PerConnConcurrency:     perConn,
+		LogLevel:               env("TUMA_LOG_LEVEL", "info"),
+		DemoMode:               demoMode,
 		PlaygroundInternalBase: pgInternal,
 		PlaygroundSessionTTL:   time.Duration(pgHours) * time.Hour,
 		PlaygroundMaxSessions:  pgMax,
-		AlertEvalInterval: time.Duration(alertEvalS) * time.Second,
+		AlertEvalInterval:      time.Duration(alertEvalS) * time.Second,
 		SMTP: SMTPConfig{
 			Host:     env("SMTP_HOST", ""),
 			Port:     smtpPort,
@@ -97,6 +98,7 @@ func Load() (*Config, error) {
 			Password: os.Getenv("SMTP_PASSWORD"), // deliberately not using env() to avoid accidental logging
 			From:     env("SMTP_FROM", "tuma@localhost"),
 		},
+		SlackBotToken: os.Getenv("SLACK_BOT_TOKEN"),
 	}, nil
 }
 

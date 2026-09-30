@@ -50,17 +50,6 @@ Threshold           : {{limit}}
 Please review your open issues in the Tuma console.
 `),
 	},
-	"OPEN_ISSUES": {
-		Subject: "Alert: Open Issues Exceeded — {{resource_name}}",
-		Body: strings.TrimSpace(`
-Your open issues have exceeded the configured limit.
-
-Current open issues : {{current_value}}
-Threshold           : {{limit}}
-
-Please review your open issues in the Tuma console.
-`),
-	},
 	TypeDeliverySuccessDropped: {
 		Subject: "Alert: Delivery Success Dropped Below Threshold — {{resource_name}}",
 		Body: strings.TrimSpace(`
@@ -138,6 +127,40 @@ func RenderCustom(subjectTmpl, bodyTmpl string, vars map[string]string) (subject
 func GetDefaultTemplate(typ Type) (Template, bool) {
 	tmpl, ok := registry[typ]
 	return tmpl, ok
+}
+
+// TypeForRule selects the default template for an alert rule type.
+// A rule with its own subject/body still uses this type so a missing half
+// of a custom template falls back to the matching default, not open-issues.
+func TypeForRule(ruleType string) (Type, error) {
+	switch ruleType {
+	case "OPEN_ISSUES":
+		return TypeOpenIssuesExceeded, nil
+	case "DELIVERY_SUCCESS":
+		return TypeDeliverySuccessDropped, nil
+	case "UNRESOLVED_TIME":
+		return TypeIssueUnresolved, nil
+	default:
+		return "", fmt.Errorf("%w: rule_type %q", ErrUnknownType, ruleType)
+	}
+}
+
+// RenderRequest renders either the request's custom templates or the default
+// for req.Type. An empty custom subject or body is filled from that default.
+func RenderRequest(req Request) (subject, body string, err error) {
+	if req.CustomSubject != "" || req.CustomBody != "" {
+		subj, bodyTmpl := req.CustomSubject, req.CustomBody
+		if def, ok := GetDefaultTemplate(req.Type); ok {
+			if subj == "" {
+				subj = def.Subject
+			}
+			if bodyTmpl == "" {
+				bodyTmpl = def.Body
+			}
+		}
+		return RenderCustom(subj, bodyTmpl, req.Vars)
+	}
+	return Render(req.Type, req.Vars)
 }
 
 // substitute replaces every {{key}} occurrence in s with vars[key].

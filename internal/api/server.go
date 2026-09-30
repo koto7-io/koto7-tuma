@@ -82,6 +82,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/alert-rules/{id}", s.auth(s.patchAlertRule))
 	mux.HandleFunc("DELETE /api/alert-rules/{id}", s.auth(s.deleteAlertRule))
 	mux.HandleFunc("GET /api/alert-notifications", s.auth(s.listAlertNotifications))
+	mux.HandleFunc("GET /api/admin/notification-settings", s.auth(s.getNotificationSettings))
+	mux.HandleFunc("PUT /api/admin/notification-settings", s.auth(s.putNotificationSettings))
 
 	mux.HandleFunc("GET /api/sink", s.auth(s.getSink))
 	mux.HandleFunc("POST /api/sink/break", s.auth(s.sinkBreak))

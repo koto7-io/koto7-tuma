@@ -41,10 +41,18 @@ func (s *Server) registerPlaygroundRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /playground/r/{session_id}/hook", s.playgroundReceiver)
 }
 
-func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
+	emailEnabled := s.cfg.SMTP.Host != ""
+	slackEnabled := s.cfg.SlackBotToken != ""
+	if eff, err := s.notificationSettings(r); err == nil {
+		emailEnabled = eff.View.EmailEnabled
+		slackEnabled = eff.View.SlackEnabled
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"demo_mode": s.cfg.DemoMode,
-		"sink_url":  s.sinkURL(),
+		"demo_mode":     s.cfg.DemoMode,
+		"sink_url":      s.sinkURL(),
+		"email_enabled": emailEnabled,
+		"slack_enabled": slackEnabled,
 	})
 }
 
@@ -123,11 +131,11 @@ func (s *Server) playgroundBootstrap(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) playgroundSummary(ctx context.Context, ps *storage.PlaygroundSession, conn *storage.Connection) map[string]any {
 	return map[string]any{
-		"session_id":    ps.ID.String(),
-		"connection_id": conn.ID.String(),
-		"inbound_url":   storage.InboundURL(s.cfg.PublicBaseURL, conn.InboundPath),
-		"inbound_path":  conn.InboundPath,
-		"source_type":   conn.SourceType,
+		"session_id":       ps.ID.String(),
+		"connection_id":    conn.ID.String(),
+		"inbound_url":      storage.InboundURL(s.cfg.PublicBaseURL, conn.InboundPath),
+		"inbound_path":     conn.InboundPath,
+		"source_type":      conn.SourceType,
 		"destination_fail": ps.FailDestination,
 	}
 }
@@ -163,11 +171,11 @@ func (s *Server) playgroundStatus(w http.ResponseWriter, r *http.Request) {
 	deliveries, _ := s.store.ListDeliveriesForConnection(r.Context(), conn.ID, 3)
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":         status,
-		"delivered_24h":  delivered,
-		"open_issues":    openIssues,
-		"inbound_url":    storage.InboundURL(s.cfg.PublicBaseURL, conn.InboundPath),
-		"fail_destination": ps.FailDestination,
+		"status":            status,
+		"delivered_24h":     delivered,
+		"open_issues":       openIssues,
+		"inbound_url":       storage.InboundURL(s.cfg.PublicBaseURL, conn.InboundPath),
+		"fail_destination":  ps.FailDestination,
 		"recent_deliveries": deliveries,
 	})
 }
@@ -228,9 +236,9 @@ func (s *Server) playgroundStream(w http.ResponseWriter, r *http.Request) {
 }
 
 type simulateBody struct {
-	Provider           string `json:"provider"`
-	Count              int    `json:"count"`
-	DuplicateEventID   string `json:"duplicate_event_id"`
+	Provider         string `json:"provider"`
+	Count            int    `json:"count"`
+	DuplicateEventID string `json:"duplicate_event_id"`
 }
 
 func (s *Server) playgroundSimulate(w http.ResponseWriter, r *http.Request) {

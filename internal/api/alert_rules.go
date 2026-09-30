@@ -2,27 +2,23 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/mail"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
+	"github.com/koto7/tuma/internal/notification"
 	"github.com/koto7/tuma/internal/storage"
 )
-
-// maxAlertRules is the hard cap enforced at creation time.
-const maxAlertRules = 10
 
 // validUnitsForType maps each rule type to its single permitted unit.
 var validUnitsForType = map[string]string{
 	"OPEN_ISSUES":      "COUNT",
 	"DELIVERY_SUCCESS": "PERCENT",
 	"UNRESOLVED_TIME":  "HOURS",
-}
-
-var validNotificationTypes = map[string]bool{
-	"slack": true,
-	"email": true,
 }
 
 // validateAlertRule checks all fields required for creating a rule.
@@ -40,13 +36,27 @@ func validateAlertRule(ruleType, unit string, threshold float64, notifType, noti
 	if ruleType == "DELIVERY_SUCCESS" && threshold > 100 {
 		return "threshold for DELIVERY_SUCCESS must be between 0 and 100"
 	}
-	if !validNotificationTypes[notifType] {
-		return "invalid notification_type: must be one of slack, email"
-	}
-	if notifDest == "" {
-		return "notification_dest is required"
+	switch notifType {
+	case "email":
+		if !validEmail(notifDest) {
+			return "notification_dest must be an email address"
+		}
+	case "slack_dm":
+		if !notification.ValidSlackUserID(notifDest) {
+			return "notification_dest must be a Slack member ID"
+		}
+	default:
+		return "invalid notification_type: must be email or slack_dm"
 	}
 	return ""
+}
+
+func validEmail(s string) bool {
+	if s == "" || strings.ContainsAny(s, " \r\n") {
+		return false
+	}
+	addr, err := mail.ParseAddress(s)
+	return err == nil && addr.Address == s
 }
 
 // ─── List alert rules ─────────────────────────────────────────────────────────
@@ -101,14 +111,17 @@ func (s *Server) createAlertRule(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-
-	count, err := s.store.CountAlertRules(r.Context())
+	eff, err := s.notificationSettings(r)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if count >= maxAlertRules {
-		http.Error(w, "maximum 10 alert rules allowed", http.StatusBadRequest)
+	if req.NotificationType == "email" && !eff.View.EmailEnabled {
+		http.Error(w, "set email in Admin, or SMTP_HOST on the server", http.StatusBadRequest)
+		return
+	}
+	if req.NotificationType == "slack_dm" && !eff.View.SlackEnabled {
+		http.Error(w, "set the Slack bot token in Admin, or SLACK_BOT_TOKEN on the server", http.StatusBadRequest)
 		return
 	}
 
@@ -124,6 +137,10 @@ func (s *Server) createAlertRule(w http.ResponseWriter, r *http.Request) {
 		BodyTemplate:     req.BodyTemplate,
 	}
 	if err := s.store.CreateAlertRule(r.Context(), rule); err != nil {
+		if errors.Is(err, storage.ErrTooManyAlertRules) {
+			http.Error(w, "maximum 10 alert rules allowed", http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -160,7 +177,11 @@ func (s *Server) patchAlertRule(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, err := s.store.GetAlertRule(r.Context(), id)
-		if err != nil || existing == nil {
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if existing == nil {
 			http.NotFound(w, r)
 			return
 		}
@@ -171,8 +192,12 @@ func (s *Server) patchAlertRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rule, err := s.store.UpdateAlertRule(r.Context(), id, req.Active, req.Threshold, req.SubjectTemplate, req.BodyTemplate)
-	if err != nil || rule == nil {
+	if errors.Is(err, storage.ErrAlertRuleNotFound) {
 		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -189,6 +214,10 @@ func (s *Server) deleteAlertRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.store.DeleteAlertRule(r.Context(), id); err != nil {
+		if errors.Is(err, storage.ErrAlertRuleNotFound) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

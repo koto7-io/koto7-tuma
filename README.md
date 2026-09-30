@@ -4,7 +4,7 @@
 
 Self-hosted webhook reliability layer. Providers POST to Tuma; Tuma stores events durably, delivers to your app with retries, and surfaces failures for replay.
 
-**Console:** Connections · Metrics · Issues  
+**Console:** Connections · Metrics · Issues · Admin  
 **Stack:** Go API + Temporal worker + Postgres + React UI (Docker Compose)
 
 ---
@@ -18,7 +18,7 @@ docker compose up --build
 
 | URL | Purpose |
 |---|---|
-| http://localhost | Tuma console (Connections, Metrics, Issues) |
+| http://localhost | Tuma console (Connections, Metrics, Issues, Admin) |
 | http://localhost:3001 | Grafana (Prometheus dashboards — separate login) |
 
 ### First login
@@ -63,6 +63,7 @@ The default Compose file is for **local dev**. Treat these as public if you expo
 | **Postgres** | `tuma` / `tuma` on internal network only | Use strong `POSTGRES_PASSWORD` + `DATABASE_URL` for anything beyond localhost. |
 | **Grafana** | `admin` / `tuma` on **:3001** | Change `GF_SECURITY_ADMIN_PASSWORD`. Consider not publishing `:3001` to the internet (VPN / SSH tunnel). |
 | **Signing secrets** | Shown once when creating a connection | Copy into Stripe/GitHub dashboard; Tuma encrypts at rest. Don't commit secrets to git. |
+| **SMTP password / Slack bot token** | Unset | Set in **Admin**, or `SMTP_*` / `SLACK_BOT_TOKEN` in the environment. Saved console values are encrypted. Never commit them. |
 | **Inbound webhooks** (`POST /e/{path}`) | Public by design | URLs are unguessable paths, not secret. **Verification is the signing secret** (Stripe HMAC, etc.). `internal` source skips verification — use only on trusted networks. |
 | **Session cookies** | HttpOnly, SameSite=Lax, 7-day TTL | `Secure` flag is set automatically when `TUMA_PUBLIC_BASE_URL` starts with `https://`. Terminate TLS at Caddy/reverse proxy. |
 | **Temporal / Prometheus** | Internal Docker network only | Not exposed on host ports in default compose — keep it that way. |
@@ -101,6 +102,39 @@ Platform-wide 24h view: ingestion, deliveries, failures, p95, hourly charts, per
 ### Issues
 
 Failed deliveries after all retries. Open an issue → inspect payload → **Replay** after fixing the destination. Bulk-select + **Replay selected** for batches.
+
+Alert rules live on this page. A rule fires once per breach, then again only after the metric recovers. A failed send stays unlatched and shows the error on the rule.
+
+### Admin
+
+Email (SMTP) and Slack DMs. A value saved here overrides the same variable in the environment. Leave a field blank to keep using the environment. The worker picks up a save on the next check. No restart.
+
+Slack is a workspace bot token (`chat:write`, `im:write`), not an incoming webhook. Each rule then names a Slack member ID (`U…`).
+
+---
+
+## Alerts
+
+| Rule | Fires when |
+|---|---|
+| Open issues | Count is above the threshold |
+| Delivery success | Success rate over 24h is below the threshold. No deliveries in that window is not a success and does not fire. |
+| Unresolved time | The oldest open issue is older than the threshold |
+
+Each rule has its own subject and body. Placeholders: `{{resource_name}}`, `{{limit}}`, `{{current_value}}`. If you leave the templates empty, Tuma uses the default for that rule type.
+
+Delivery is email or a Slack DM. Both stay disabled in the rule form until that channel is configured in **Admin** or in the environment.
+
+| Variable | Purpose |
+|---|---|
+| `SMTP_HOST` | SMTP server. Empty means email is off unless Admin has a host. |
+| `SMTP_PORT` | Default `587` |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | SMTP login |
+| `SMTP_FROM` | From address |
+| `SLACK_BOT_TOKEN` | Workspace bot token. Empty means Slack DMs are off unless Admin has a token. |
+| `TUMA_ALERT_EVAL_INTERVAL_SECONDS` | How often rules are checked. Default `60`. |
+
+Set these on **both** `tuma-api` and `tuma-worker` when using the environment. Compose passes one `deploy/.env` to both. Admin is shared through Postgres, so a console save does not need to be copied between processes.
 
 ---
 
@@ -236,6 +270,13 @@ Tuma guarantees **at-least-once**, not exactly-once. Retries and replays can cau
 | `TUMA_SESSION_TTL_HOURS` | `168` | Console session lifetime |
 | `TUMA_PER_CONN_CONCURRENCY` | `10` | Max concurrent deliveries per connection |
 | `TUMA_MAX_BODY_BYTES` | `1048576` | Max inbound webhook body size |
+| `SMTP_HOST` | *(empty)* | Outbound email. Overridden by Admin when a host is saved there. |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USERNAME` | *(empty)* | SMTP login |
+| `SMTP_PASSWORD` | *(empty)* | SMTP password. Not logged. |
+| `SMTP_FROM` | `tuma@localhost` | From address |
+| `SLACK_BOT_TOKEN` | *(empty)* | Slack DM bot token. Overridden by Admin when a token is saved there. |
+| `TUMA_ALERT_EVAL_INTERVAL_SECONDS` | `60` | Alert rule check interval |
 
 See `deploy/.env.example` for production template.
 
@@ -266,6 +307,7 @@ For production: managed Postgres with automated backups and PITR. **Issues repla
 | No deliveries in echo | Wrong destination URL (`host.docker.internal` vs LAN IP); worker not running |
 | API container restart loop | Temporal not ready yet — wait; `restart: unless-stopped` should recover |
 | Session lost on HTTPS | Set `TUMA_PUBLIC_BASE_URL` to `https://…` matching your public URL |
+| Alert rule will not send | Channel is off (Admin or `SMTP_HOST` / `SLACK_BOT_TOKEN`), or the last error on the rule (bad SMTP login, Slack blocked the DM, wrong member ID) |
 
 **Fresh start (wipes all data):**
 
@@ -290,7 +332,7 @@ cd web && npm install && npm run dev  # terminal 3
 
 ## Architecture & scope
 
-- **v1 included:** connections, retries, issues/DLQ + replay, session auth, in-app metrics, Prometheus/Grafana, dark mode
+- **v1 included:** connections, retries, issues/DLQ + replay, alert rules (email and Slack DM), session auth, in-app metrics, Prometheus/Grafana, dark mode
 - **Not in v1:** multi-tenancy, billing, RBAC, transformations
 
 ---
