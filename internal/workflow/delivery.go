@@ -72,7 +72,7 @@ func DeliveryWorkflow(ctx workflow.Context, eventID uuid.UUID) error {
 
 	actOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 1},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
 	}
 	ctx = workflow.WithActivityOptions(ctx, actOpts)
 
@@ -175,6 +175,7 @@ func (a *Activities) DeliverActivity(ctx context.Context, eventID uuid.UUID, att
 			EventID: eventID, AttemptNumber: attempt, Status: "failed",
 			LatencyMS: &latency,
 		})
+		a.noteOpenIssue(ctx, event, attempt, "delivery failed: "+err.Error())
 		logger.Warn("delivery failed", "error", err)
 		return DeliverResult{Success: false, LatencyMS: latency, Error: err.Error(), DeliveryID: deliveryID}, nil
 	}
@@ -203,10 +204,28 @@ func (a *Activities) DeliverActivity(ctx context.Context, eventID uuid.UUID, att
 	if success {
 		return DeliverResult{Success: true, ResponseCode: code, LatencyMS: latency, DeliveryID: deliveryID}, nil
 	}
+	reason := fmt.Sprintf("destination returned %d", code)
+	a.noteOpenIssue(ctx, event, attempt, reason)
 	return DeliverResult{
 		Success: false, ResponseCode: code, LatencyMS: latency,
-		Error: fmt.Sprintf("destination returned %d", code), DeliveryID: deliveryID,
+		Error: reason, DeliveryID: deliveryID,
 	}, nil
+}
+
+// noteOpenIssue makes a failing attempt visible immediately. The issue is
+// resolved if a later attempt succeeds. A RecordIssue error must not abort
+// the retry loop.
+func (a *Activities) noteOpenIssue(ctx context.Context, event *storage.Event, attempt int, reason string) {
+	err := a.Store.RecordIssue(ctx, &storage.Issue{
+		EventID:           event.ID,
+		ConnectionID:      event.ConnectionID,
+		Reason:            reason,
+		AttemptsExhausted: attempt,
+		FirstFailedAt:     time.Now(),
+	})
+	if err != nil {
+		activity.GetLogger(ctx).Warn("record issue failed", "error", err)
+	}
 }
 
 func (a *Activities) RecordDelivered(ctx context.Context, eventID uuid.UUID, attempt int, result DeliverResult) error {

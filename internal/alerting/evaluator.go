@@ -70,8 +70,20 @@ func New(store Store, notifier Notifier, slack SlackDM, interval time.Duration, 
 	}
 }
 
+// alertLocker is implemented by storage.Store. Delivery workers can scale;
+// alert evaluation must not, or one breach sends twice.
+type alertLocker interface {
+	HoldAlertEvaluation(ctx context.Context) (release func(), held bool, err error)
+}
+
 // Run evaluates once immediately, then on every tick, until ctx is cancelled.
 func (e *Evaluator) Run(ctx context.Context) {
+	release, err := e.holdEvaluation(ctx)
+	if err != nil || release == nil {
+		return
+	}
+	defer release()
+
 	e.logger.Info("alert evaluator started", "interval", e.interval)
 	ticker := time.NewTicker(e.interval)
 	defer ticker.Stop()
@@ -84,6 +96,35 @@ func (e *Evaluator) Run(ctx context.Context) {
 			e.logger.Info("alert evaluator stopped")
 			return
 		case <-ticker.C:
+		}
+	}
+}
+
+func (e *Evaluator) holdEvaluation(ctx context.Context) (func(), error) {
+	locker, ok := e.store.(alertLocker)
+	if !ok {
+		return func() {}, nil
+	}
+	wait := e.interval
+	if wait <= 0 {
+		wait = time.Minute
+	}
+	for {
+		release, held, err := locker.HoldAlertEvaluation(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			e.logger.Error("alert lock failed", "error", err)
+		} else if held {
+			return release, nil
+		} else {
+			e.logger.Info("alert evaluator waiting; another worker holds it")
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
 		}
 	}
 }

@@ -87,6 +87,34 @@ func New(pool *pgxpool.Pool, payloadEnc *crypto.Encryptor) *Store {
 	return &Store{pool: pool, payloadEnc: payloadEnc}
 }
 
+// alertEvalLockKey is the session advisory lock for alert evaluation.
+// One worker holds it for the life of the process. Others wait.
+const alertEvalLockKey int64 = 740011
+
+// HoldAlertEvaluation takes a session advisory lock on one pool connection.
+// The returned function unlocks and returns that connection. held is false
+// when another session already owns the lock.
+func (s *Store) HoldAlertEvaluation(ctx context.Context) (func(), bool, error) {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	var held bool
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, alertEvalLockKey).Scan(&held); err != nil {
+		conn.Release()
+		return nil, false, err
+	}
+	if !held {
+		conn.Release()
+		return nil, false, nil
+	}
+	release := func() {
+		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, alertEvalLockKey)
+		conn.Release()
+	}
+	return release, true, nil
+}
+
 func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
 }
@@ -304,7 +332,15 @@ func (s *Store) RecordIssue(ctx context.Context, issue *Issue) error {
 		INSERT INTO issues (event_id, connection_id, reason, attempts_exhausted, first_failed_at, status)
 		VALUES ($1,$2,$3,$4,$5,'open')
 		ON CONFLICT (event_id) DO UPDATE SET
-			reason=EXCLUDED.reason, attempts_exhausted=EXCLUDED.attempts_exhausted, status='open', resolved_at=NULL
+			attempts_exhausted = GREATEST(issues.attempts_exhausted, EXCLUDED.attempts_exhausted),
+			reason = CASE
+				WHEN EXCLUDED.reason LIKE 'Delivery attempts exhausted%'
+					AND issues.reason NOT LIKE 'Delivery attempts exhausted%'
+				THEN issues.reason
+				ELSE EXCLUDED.reason
+			END,
+			status = 'open',
+			resolved_at = NULL
 		RETURNING id
 	`, issue.EventID, issue.ConnectionID, issue.Reason, issue.AttemptsExhausted, issue.FirstFailedAt).Scan(&issue.ID)
 }
