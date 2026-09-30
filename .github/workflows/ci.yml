@@ -40,7 +40,7 @@ jobs:
       - name: Test
         env:
           DATABASE_URL: postgres://tuma:tuma@localhost:5432/tuma?sslmode=disable
-        run: go test ./...
+        run: go test ./... -p 1
 
   web:
     runs-on: ubuntu-latest
