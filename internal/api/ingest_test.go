@@ -9,6 +9,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/client"
 
@@ -146,7 +149,17 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if err := pool.Ping(context.Background()); err != nil {
 		t.Skip("postgres not available:", err)
 	}
-	_, _ = pool.Exec(context.Background(), `TRUNCATE issues, deliveries, events, connections, sessions, users CASCADE`)
+	m, err := migrate.New("file://../../migrations", url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _, _ = m.Close() }()
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `TRUNCATE issues, deliveries, events, connections, sessions, users CASCADE`); err != nil {
+		t.Fatal(err)
+	}
 	return pool
 }
 
