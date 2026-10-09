@@ -35,6 +35,27 @@ services:
     networks:
       - internal
 
+  postfix:
+    image: boky/postfix:latest
+    restart: unless-stopped
+    environment:
+      HOSTNAME: ${POSTFIX_HOSTNAME:-mail.localhost}
+      ALLOWED_SENDER_DOMAINS: ${POSTFIX_DOMAIN:-localhost}
+      RELAYHOST: ${POSTFIX_RELAYHOST:-}
+      # Postfix listens on port 25 inside the internal network.
+      # No credentials required — Docker subnet is trusted via mynetworks.
+    expose:
+      - "25"
+    volumes:
+      - postfix_spool:/var/spool/postfix
+    healthcheck:
+      test: ["CMD-SHELL", "postfix status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
   tuma-api:
     build: ..
     command: ["serve", "api"]
@@ -44,6 +65,8 @@ services:
         condition: service_healthy
       temporal:
         condition: service_started
+      postfix:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://tuma:tuma@postgres:5432/tuma?sslmode=disable
       TEMPORAL_HOST: temporal:7233
@@ -56,11 +79,12 @@ services:
       TUMA_PLAYGROUND_INTERNAL_BASE: ${TUMA_PLAYGROUND_INTERNAL_BASE:-http://tuma-api:8080}
       TUMA_PLAYGROUND_SESSION_TTL_HOURS: ${TUMA_PLAYGROUND_SESSION_TTL_HOURS:-2}
       TUMA_PLAYGROUND_MAX_SESSIONS: ${TUMA_PLAYGROUND_MAX_SESSIONS:-500}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-}
+      # Postfix runs as a sidecar on the internal network — no auth required.
+      SMTP_HOST: postfix
+      SMTP_PORT: "25"
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM: ${SMTP_FROM:-alerts@localhost}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
     expose:
       - "8080"
@@ -76,16 +100,19 @@ services:
         condition: service_healthy
       temporal:
         condition: service_started
+      postfix:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://tuma:tuma@postgres:5432/tuma?sslmode=disable
       TEMPORAL_HOST: temporal:7233
       TUMA_ENCRYPTION_KEY: "01234567890123456789012345678901"
       TUMA_PER_CONN_CONCURRENCY: "10"
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-}
+      # Postfix runs as a sidecar on the internal network — no auth required.
+      SMTP_HOST: postfix
+      SMTP_PORT: "25"
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM: ${SMTP_FROM:-alerts@localhost}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
     networks:
       - internal
@@ -149,3 +176,4 @@ volumes:
   postgres_data:
   grafana_data:
   caddy_data:
+  postfix_spool:   # Persists Postfix queue across container restarts
