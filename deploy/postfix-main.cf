@@ -1,0 +1,92 @@
+# ==============================================================================
+# Postfix main.cf — Tuma internal mail relay
+# Mounted read-only at /etc/postfix/main.cf inside the postfix container.
+#
+# Role: accept mail from the Docker-internal network (tuma-api, tuma-worker)
+# and deliver it directly to recipient mail servers via port 25.
+# No authentication is required from internal senders.
+# ==============================================================================
+
+# --------------------------------------------------------------------------
+# Identity
+# The hostname Postfix announces in EHLO/HELO and uses for bounce addresses.
+# Set POSTFIX_HOSTNAME in deploy/.env to match your MX / PTR record.
+# Example: mail.yourdomain.com
+# --------------------------------------------------------------------------
+myhostname = ${POSTFIX_HOSTNAME}
+mydomain   = ${POSTFIX_DOMAIN}
+
+# --------------------------------------------------------------------------
+# Origin
+# The domain appended to addresses that have no domain part.
+# Unqualified addresses become user@POSTFIX_DOMAIN.
+# --------------------------------------------------------------------------
+myorigin = $mydomain
+
+# --------------------------------------------------------------------------
+# Interfaces
+# Listen on all interfaces inside the container so other containers on the
+# Docker internal network can reach port 25.
+# --------------------------------------------------------------------------
+inet_interfaces = all
+inet_protocols  = ipv4
+
+# --------------------------------------------------------------------------
+# Destinations
+# Mail addressed to these domains is delivered locally (i.e. localhost only).
+# Everything else is routed to the internet.
+# --------------------------------------------------------------------------
+mydestination = localhost, localhost.localdomain
+
+# --------------------------------------------------------------------------
+# Relay access — trusted networks
+# Only containers on the Docker-internal subnet are allowed to relay.
+# No username/password is needed from internal senders.
+# Adjust the CIDR block if your Docker network uses a different range.
+# --------------------------------------------------------------------------
+mynetworks = 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+
+# --------------------------------------------------------------------------
+# Relayhost
+# Leave empty to deliver directly to recipient MX servers (recommended for
+# VPS providers where port 25 outbound is open, e.g. Hetzner).
+#
+# For providers that block port 25 (AWS EC2, GCP) set a smarthost relay:
+#   relayhost = [email-smtp.eu-west-1.amazonaws.com]:587
+# Leave blank in POSTFIX_RELAYHOST env var for direct delivery.
+# --------------------------------------------------------------------------
+relayhost = ${POSTFIX_RELAYHOST}
+
+# --------------------------------------------------------------------------
+# TLS (outbound)
+# Opportunistic TLS: upgrade to TLS when the remote MTA supports it.
+# --------------------------------------------------------------------------
+smtp_tls_security_level = may
+smtp_tls_loglevel       = 1
+smtp_tls_CAfile         = /etc/ssl/certs/ca-certificates.crt
+
+# --------------------------------------------------------------------------
+# Queue / timeouts
+# Short retry window to surface delivery problems quickly in logs.
+# --------------------------------------------------------------------------
+maximal_queue_lifetime  = 1d
+bounce_queue_lifetime   = 1d
+smtp_connect_timeout    = 15s
+
+# --------------------------------------------------------------------------
+# Size limits
+# --------------------------------------------------------------------------
+message_size_limit  = 10240000   # 10 MB
+mailbox_size_limit  = 0          # no local mailbox limit (we don't do local delivery)
+
+# --------------------------------------------------------------------------
+# Logging
+# Write to stdout/stderr so Docker captures logs via `docker compose logs`.
+# --------------------------------------------------------------------------
+maillog_file = /dev/stdout
+
+# --------------------------------------------------------------------------
+# Disable local delivery agent — we are relay-only
+# --------------------------------------------------------------------------
+local_recipient_maps =
+local_transport       = error:5.1.1 local delivery disabled
